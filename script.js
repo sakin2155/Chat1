@@ -160,7 +160,7 @@ const storyListEl = document.getElementById('story-list');
 const addStoryBtn = document.getElementById('add-story-btn');
 const storyFileInput = document.getElementById('story-file-input');
 const storyViewer = document.getElementById('story-viewer');
-const storyViewerMedia = document.getElementById('story-viewer-media');
+const storyViewerMediaContainer = document.getElementById('story-viewer-media-container');
 const storyViewerClose = document.getElementById('story-viewer-close');
 const storyViewerName = document.getElementById('story-viewer-name');
 const storyViewerTime = document.getElementById('story-viewer-time');
@@ -1177,6 +1177,10 @@ async function uploadStory(file) {
     try {
         storyUploadInProgress = true;
         setStoryUploadState(true);
+
+        // Detect media type
+        const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+
         const mediaUrl = await uploadImageToCloudinary(file);
         const authorName = currentUserData?.displayName || currentUser?.email || 'You';
         const authorAvatar = currentUserData?.photoURL || '';
@@ -1184,6 +1188,7 @@ async function uploadStory(file) {
         await addDoc(collection(db, 'stories'), {
             userId: currentUser.uid,
             mediaUrl,
+            mediaType,
             createdAt: serverTimestamp(),
             authorName,
             authorAvatar,
@@ -1339,9 +1344,31 @@ function showStoryAtIndex(index) {
     stopStoryProgress();
     activeStoryIndex = index;
     const story = activeStorySequence[index];
-    if (storyViewerMedia) {
-        storyViewerMedia.src = story.mediaUrl;
+
+    // Render appropriate media element
+    if (storyViewerMediaContainer) {
+        const mediaType = story.mediaType || 'image'; // Default to image for old stories
+        storyViewerMediaContainer.innerHTML = '';
+
+        if (mediaType === 'video') {
+            const video = document.createElement('video');
+            video.src = story.mediaUrl;
+            video.className = 'story-viewer-media';
+            video.autoplay = true;
+            video.loop = false;
+            video.muted = false;
+            video.controls = false;
+            video.playsInline = true;
+            storyViewerMediaContainer.appendChild(video);
+        } else {
+            const img = document.createElement('img');
+            img.src = story.mediaUrl;
+            img.alt = 'Story';
+            img.className = 'story-viewer-media';
+            storyViewerMediaContainer.appendChild(img);
+        }
     }
+
     if (storyViewerName) {
         storyViewerName.textContent = story.authorName || 'Story';
     }
@@ -1797,10 +1824,10 @@ if (mediaMenu) {
     mediaMenu.addEventListener('click', (e) => {
         const menuItem = e.target.closest('.media-menu-item');
         if (!menuItem) return;
-        
+
         const action = menuItem.dataset.action;
         mediaMenu.classList.add('hidden');
-        
+
         if (action === 'image') {
             imageInput.click();
         } else if (action === 'gif') {
@@ -1842,7 +1869,7 @@ function openGifModal() {
     }
     gifModal.classList.remove('hidden');
     gifSearchInput?.focus();
-    
+
     // Reset pagination when opening modal
     if (!gifInitialLoadDone) {
         gifCurrentOffset = 0;
@@ -1868,11 +1895,11 @@ function closeGifModal() {
 
 function handleGifScroll() {
     if (!gifResultsEl || gifLoadingMore || !gifHasMore) return;
-    
+
     const scrollTop = gifResultsEl.scrollTop;
     const scrollHeight = gifResultsEl.scrollHeight;
     const clientHeight = gifResultsEl.clientHeight;
-    
+
     // Load more when user is within 200px of bottom
     if (scrollHeight - scrollTop - clientHeight < 200) {
         console.log('Loading more GIFs...', 'offset:', gifCurrentOffset);
@@ -1901,12 +1928,12 @@ function handleGifSearchInput(event) {
 
 async function fetchGifResults(query = '', offset = 0, reset = false) {
     if (!gifResultsEl) return;
-    
+
     // Don't load if already loading or no more results
     if (gifLoadingMore || (!gifHasMore && !reset)) return;
-    
+
     gifLoadingMore = true;
-    
+
     if (reset) {
         setGifLoading(true);
         gifEmptyState?.classList.add('hidden');
@@ -1928,7 +1955,7 @@ async function fetchGifResults(query = '', offset = 0, reset = false) {
         lang: 'en',
         offset: offset.toString()
     });
-    
+
     let endpoint = 'trending';
     if (query) {
         params.set('q', query);
@@ -1941,16 +1968,16 @@ async function fetchGifResults(query = '', offset = 0, reset = false) {
         const response = await fetch(url, {
             signal: gifAbortController.signal
         });
-        
+
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Giphy API error:', response.status, errorText);
             throw new Error(`Giphy API returned ${response.status}: ${errorText}`);
         }
-        
+
         const data = await response.json();
         console.log('GIF data received:', data);
-        
+
         if (!data || !data.data) {
             console.warn('Unexpected API response format:', data);
             if (reset) {
@@ -1958,14 +1985,14 @@ async function fetchGifResults(query = '', offset = 0, reset = false) {
             }
             return;
         }
-        
+
         const results = data.data || [];
         const pagination = data.pagination || {};
-        
+
         // Check if there are more results
         const totalCount = pagination.total_count;
         const currentCount = offset + results.length;
-        
+
         // If we got a full page of results, assume there might be more
         // If total_count is available, use it; otherwise assume more if we got full results
         if (totalCount !== undefined && totalCount !== null) {
@@ -1974,10 +2001,10 @@ async function fetchGifResults(query = '', offset = 0, reset = false) {
             // For trending or when total_count is not available, assume more if we got full results
             gifHasMore = results.length >= GIPHY_RESULT_LIMIT;
         }
-        
+
         // Update offset
         gifCurrentOffset = offset + results.length;
-        
+
         renderGifResults(results, query, reset);
     } catch (error) {
         if (error.name === 'AbortError') return;
@@ -2005,12 +2032,12 @@ function renderGifResults(results, query, reset = true) {
         console.error('GIF results element not found');
         return;
     }
-    
+
     // Only clear if resetting (new search or initial load)
     if (reset) {
         gifResultsEl.innerHTML = '';
     }
-    
+
     if (!results || !Array.isArray(results) || results.length === 0) {
         if (reset) {
             showGifEmptyState(query ? 'No GIFs match that vibe. Try a new word.' : 'Nothing trending right now. Try searching!');
@@ -2020,19 +2047,19 @@ function renderGifResults(results, query, reset = true) {
 
     gifEmptyState?.classList.add('hidden');
     let renderedCount = 0;
-    
+
     results.forEach((gif) => {
         try {
             // Giphy API format: gif.images.downsized_medium.url (for sending) and gif.images.fixed_height_small.url (for preview)
             const images = gif.images || {};
             const previewUrl = images.fixed_height_small?.url || images.downsized_small?.url || images.preview_gif?.url;
             const sendUrl = images.downsized_medium?.url || images.original?.url || images.fixed_height?.url;
-            
+
             if (!previewUrl || !sendUrl) {
                 console.warn('GIF result missing URLs:', gif);
                 return;
             }
-            
+
             const card = document.createElement('div');
             card.className = 'gif-card';
             const img = document.createElement('img');
@@ -2054,7 +2081,7 @@ function renderGifResults(results, query, reset = true) {
             console.error('Error rendering GIF card:', error, gif);
         }
     });
-    
+
     if (renderedCount === 0 && reset) {
         showGifEmptyState('Could not load GIF previews. Please try again.');
     } else if (renderedCount > 0) {

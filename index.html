@@ -103,7 +103,7 @@
                     <div class="story-list" id="story-list"></div>
                 </div>
                 <input type="file" id="profile-avatar-input" accept="image/*" class="hidden">
-                <input type="file" id="story-file-input" accept="image/*" class="hidden">
+                <input type="file" id="story-file-input" accept="image/*,video/*" class="hidden">
                 <div class="user-list" id="user-list">
                     <!-- Users will be dynamically loaded here -->
                 </div>
@@ -149,7 +149,8 @@
                     <button id="media-menu-btn" class="icon-btn" title="Add media">📎</button>
                     <div id="media-menu" class="media-menu hidden">
                         <button class="media-menu-item" data-action="image">
-                            <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
                                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                                 <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                 <polyline points="21 15 16 10 5 21"></polyline>
@@ -157,14 +158,16 @@
                             <span>Photo</span>
                         </button>
                         <button class="media-menu-item" data-action="gif">
-                            <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
                                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                                 <path d="M8 12h8M12 8v8"></path>
                             </svg>
                             <span>GIF</span>
                         </button>
                         <button class="media-menu-item" data-action="sticker">
-                            <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"></circle>
                                 <path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"></path>
                             </svg>
@@ -294,7 +297,9 @@
                     <button id="story-next-btn" class="story-nav-btn">›</button>
                 </div>
             </div>
-            <img id="story-viewer-media" src="" alt="Story" class="story-viewer-media">
+            <div id="story-viewer-media-container" class="story-viewer-media-container">
+                <!-- Will be dynamically populated with <img> or <video> -->
+            </div>
             <div class="story-viewer-footer">
                 <button id="story-like-btn" class="story-like-btn">♡</button>
                 <span id="story-like-count" class="story-like-count">0 likes</span>

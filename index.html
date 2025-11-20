@@ -108,6 +108,17 @@
                     </div>
                 </div>
 
+                <!-- Reply Preview Bar (Hidden by Default) -->
+                <div id="reply-preview" class="reply-preview hidden">
+                    <div class="reply-preview-content">
+                        <div class="reply-preview-header">
+                            <span class="reply-to-name"></span>
+                            <button id="cancel-reply" class="cancel-reply-btn">×</button>
+                        </div>
+                        <div class="reply-preview-text"></div>
+                    </div>
+                </div>
+
                 <div class="message-input-container">
                     <button id="image-upload-btn" class="icon-btn" title="Upload Image">📎</button>
                     <input type="file" id="image-input" accept="image/*" class="hidden">
@@ -130,6 +141,7 @@
 
     <!-- Message Options Menu (Hidden by Default) -->
     <div id="message-options" class="message-options hidden">
+        <button class="option-btn" data-action="reply">Reply</button>
         <button class="option-btn" data-action="edit">Edit</button>
         <button class="option-btn" data-action="delete">Delete</button>
     </div>

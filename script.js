@@ -53,6 +53,13 @@ const db = getFirestore(app);
 const CLOUDINARY_CLOUD_NAME = "dxhn3fzfu";
 const CLOUDINARY_UPLOAD_PRESET = "chat123";
 
+// Giphy API Configuration
+// Get your free API key from: https://developers.giphy.com/dashboard/
+const GIPHY_API_KEY = 'GDeNjVWG1AZz0bUqp5nzmY9JFrocS0vQ';
+const GIPHY_RESULT_LIMIT = 28;
+const CUSTOM_STICKERS_KEY_PREFIX = 'chat-custom-stickers';
+const DEFAULT_STICKER_EMOJIS = ['😀', '😂', '😍', '😎', '🤯', '😭', '🙌', '🔥', '👍', '🎉', '💀', '🤩'];
+
 const PRESENCE_TIMEOUT = 15000; // 15 seconds
 const PRESENCE_UPDATE_INTERVAL = 5000; // 5 seconds
 const STORY_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -61,6 +68,12 @@ const STORY_AUTO_ADVANCE_MS = 6000;
 // ===========================
 // Global State
 // ===========================
+const DEFAULT_STICKERS = DEFAULT_STICKER_EMOJIS.map((emoji, index) => ({
+    id: `emoji-${index}`,
+    emoji,
+    url: createEmojiStickerDataUrl(emoji)
+}));
+
 let currentUser = null;
 let currentChatUser = null;
 let currentChatId = null;
@@ -86,6 +99,14 @@ let storyUploadInProgress = false;
 let storyProgressRaf = null;
 let storyProgressStart = null;
 let storyProgressFillEl = null;
+let gifSearchTimeout = null;
+let gifInitialLoadDone = false;
+let gifAbortController = null;
+let gifCurrentOffset = 0;
+let gifCurrentQuery = '';
+let gifLoadingMore = false;
+let gifHasMore = true;
+let customStickers = [];
 
 // ===========================
 // DOM Elements
@@ -103,7 +124,8 @@ const userList = document.getElementById('user-list');
 const messagesContainer = document.getElementById('messages-container');
 const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
-const imageUploadBtn = document.getElementById('image-upload-btn');
+const mediaMenuBtn = document.getElementById('media-menu-btn');
+const mediaMenu = document.getElementById('media-menu');
 const imageInput = document.getElementById('image-input');
 const typingIndicator = document.getElementById('typing-indicator');
 const chatWindowContainer = document.getElementById('chat-window-container');
@@ -148,6 +170,20 @@ const storyNextBtn = document.getElementById('story-next-btn');
 const storyProgressEl = document.getElementById('story-progress');
 const storyLikeBtn = document.getElementById('story-like-btn');
 const storyLikeCountEl = document.getElementById('story-like-count');
+const gifModal = document.getElementById('gif-modal');
+const closeGifModalBtn = document.getElementById('close-gif-modal');
+const gifResultsEl = document.getElementById('gif-results');
+const gifSearchInput = document.getElementById('gif-search-input');
+const gifEmptyState = document.getElementById('gif-empty-state');
+const gifLoadingEl = document.getElementById('gif-loading');
+const stickerSheet = document.getElementById('sticker-sheet');
+const stickerBackdrop = stickerSheet ? stickerSheet.querySelector('.sheet-backdrop') : null;
+const closeStickerPanelBtn = document.getElementById('close-sticker-panel');
+const addStickerBtn = document.getElementById('add-sticker-btn');
+const defaultStickerGrid = document.getElementById('default-sticker-grid');
+const customStickerGrid = document.getElementById('custom-sticker-grid');
+const customStickerSection = document.getElementById('custom-sticker-section');
+const stickerFileInput = document.getElementById('sticker-file-input');
 
 renderCurrentUserProfile();
 if (imageViewerClose && imageViewer) {
@@ -204,6 +240,43 @@ if (storyNextBtn) {
 if (storyLikeBtn) {
     storyLikeBtn.addEventListener('click', toggleStoryLike);
 }
+// Media menu will be handled separately
+if (closeGifModalBtn) {
+    closeGifModalBtn.addEventListener('click', closeGifModal);
+}
+if (gifModal) {
+    gifModal.addEventListener('click', (e) => {
+        if (e.target === gifModal) {
+            closeGifModal();
+        }
+    });
+}
+if (gifSearchInput) {
+    gifSearchInput.addEventListener('input', handleGifSearchInput);
+}
+if (gifResultsEl) {
+    gifResultsEl.addEventListener('scroll', handleGifScroll);
+}
+// Media menu will be handled separately
+if (closeStickerPanelBtn) {
+    closeStickerPanelBtn.addEventListener('click', closeStickerSheet);
+}
+if (stickerBackdrop) {
+    stickerBackdrop.addEventListener('click', closeStickerSheet);
+}
+if (addStickerBtn) {
+    addStickerBtn.addEventListener('click', () => stickerFileInput?.click());
+}
+if (stickerFileInput) {
+    stickerFileInput.addEventListener('change', handleStickerUpload);
+}
+renderDefaultStickers();
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeGifModal();
+        closeStickerSheet();
+    }
+});
 
 // ===========================
 // Calculator Logic
@@ -421,6 +494,7 @@ onAuthStateChanged(auth, async (user) => {
         startPresenceTracking();
         listenToCurrentUser(user.uid);
         subscribeToStories();
+        loadCustomStickers(user.uid);
     } else {
         stopPresenceTracking();
         if (unsubscribeCurrentUser) {
@@ -436,6 +510,8 @@ onAuthStateChanged(auth, async (user) => {
         storiesByUser.clear();
         renderStories([]);
         currentUser = null;
+        customStickers = [];
+        renderCustomStickers();
     }
 });
 
@@ -674,22 +750,25 @@ function loadMessages() {
 function createMessageElement(messageData) {
     const isOwnMessage = messageData.senderId === currentUser.uid;
     const isDeleted = !!messageData.isDeleted;
+    const isStickerOrGif = !isDeleted && (messageData.type === 'sticker' || messageData.type === 'gif');
 
     const div = document.createElement('div');
-    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}`;
+    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif ? ' no-bubble' : ''}`;
     div.dataset.messageId = messageData.id;
 
     let content = '';
     if (isDeleted) {
         content = `<span class="message-deleted-text">This message was deleted</span>`;
-    } else if (messageData.type === 'image' && messageData.imgUrl) {
-        content = `<img src="${messageData.imgUrl}" class="message-image" alt="Image">`;
+    } else if (isMediaMessage(messageData)) {
+        const mediaClass = messageData.type === 'sticker' ? 'message-sticker' : 'message-image';
+        const altLabel = getMediaAltText(messageData.type);
+        content = `<img src="${messageData.imgUrl}" class="${mediaClass}" alt="${altLabel}">`;
     } else {
         content = `<span class="message-text">${formatMessageText(messageData.text || '')}</span>`;
     }
 
     let replyHtml = '';
-    if (!isDeleted && messageData.replyTo) {
+    if (!isDeleted && messageData.replyTo && !isStickerOrGif) {
         const replyName = messageData.replyTo.senderName || 'Unknown';
         const replyText = messageData.replyTo.text || '[Image]';
         replyHtml = `
@@ -700,10 +779,10 @@ function createMessageElement(messageData) {
         `;
     }
 
-    const editedLabel = !isDeleted && messageData.isEdited ? '<span class="message-edited">(edited)</span>' : '';
+    const editedLabel = !isDeleted && messageData.isEdited && !isStickerOrGif ? '<span class="message-edited">(edited)</span>' : '';
     const metaHtml = editedLabel ? `<span class="message-meta">${editedLabel}</span>` : '';
 
-    const statusLabel = !isDeleted && isOwnMessage
+    const statusLabel = !isDeleted && isOwnMessage && !isStickerOrGif
         ? `<div class="message-status">${getStatusText(messageData)}</div>`
         : '';
 
@@ -720,53 +799,66 @@ function createMessageElement(messageData) {
         reactionsHtml += '</div>';
     }
 
-    const optionsTrigger = (!isDeleted && isOwnMessage)
+    const optionsTrigger = (!isDeleted && isOwnMessage && !isStickerOrGif)
         ? '<button class="message-options-trigger">⋯</button>'
         : '';
 
-    div.innerHTML = `
-        <div class="message-bubble">
-            ${optionsTrigger}
-            ${replyHtml}
+    // For stickers and GIFs, render without bubble wrapper
+    if (isStickerOrGif) {
+        div.innerHTML = `
             ${content}
-            ${metaHtml}
             ${reactionsHtml}
-        ${statusLabel}
-        </div>
-    `;
+        `;
+    } else {
+        div.innerHTML = `
+            <div class="message-bubble">
+                ${optionsTrigger}
+                ${replyHtml}
+                ${content}
+                ${metaHtml}
+                ${reactionsHtml}
+            ${statusLabel}
+            </div>
+        `;
+    }
 
     if (!isDeleted) {
         const bubble = div.querySelector('.message-bubble');
+        const mediaElement = div.querySelector('.message-sticker, .message-image');
+        const targetElement = isStickerOrGif ? mediaElement : bubble;
         const isReceivedMessage = !isOwnMessage;
 
-        if (isReceivedMessage) {
-            bubble.addEventListener('dblclick', (e) => {
-                showReactionPopup(e, messageData.id);
-            });
-
-            bubble.addEventListener('touchstart', (e) => {
-                longPressTimer = setTimeout(() => {
+        if (targetElement) {
+            if (isReceivedMessage) {
+                targetElement.addEventListener('dblclick', (e) => {
                     showReactionPopup(e, messageData.id);
-                }, 500);
-            });
+                });
 
-            bubble.addEventListener('touchend', () => {
-                clearTimeout(longPressTimer);
-            });
-        } else {
-            bubble.addEventListener('touchstart', (e) => {
-                longPressTimer = setTimeout(() => {
-                    showMessageOptions(e.touches[0], messageData.id);
-                }, 500);
-            });
+                targetElement.addEventListener('touchstart', (e) => {
+                    longPressTimer = setTimeout(() => {
+                        showReactionPopup(e, messageData.id);
+                    }, 500);
+                });
 
-            bubble.addEventListener('touchend', () => {
-                clearTimeout(longPressTimer);
-            });
+                targetElement.addEventListener('touchend', () => {
+                    clearTimeout(longPressTimer);
+                });
+            } else if (!isStickerOrGif) {
+                // Only show options menu for non-sticker/GIF messages
+                targetElement.addEventListener('touchstart', (e) => {
+                    longPressTimer = setTimeout(() => {
+                        showMessageOptions(e.touches[0], messageData.id);
+                    }, 500);
+                });
 
-            bubble.addEventListener('touchmove', () => {
-                clearTimeout(longPressTimer);
-            });
+                targetElement.addEventListener('touchend', () => {
+                    clearTimeout(longPressTimer);
+                });
+
+                targetElement.addEventListener('touchmove', () => {
+                    clearTimeout(longPressTimer);
+                });
+            }
         }
 
         let touchStartX = 0;
@@ -859,11 +951,9 @@ function createMessageElement(messageData) {
             });
         }
 
-        if (messageData.type === 'image' && messageData.imgUrl) {
-            const imgEl = div.querySelector('.message-image');
-            if (imgEl) {
-                imgEl.addEventListener('click', () => openImageViewer(messageData.imgUrl));
-            }
+        if (isMediaMessage(messageData) && messageData.imgUrl) {
+            const mediaEl = div.querySelector('.message-image, .message-sticker');
+            mediaEl?.addEventListener('click', () => openImageViewer(messageData.imgUrl));
         }
     }
 
@@ -1163,8 +1253,27 @@ function renderStories(stories = []) {
     });
     storyListEl.innerHTML = '';
 
-    storiesByUser.forEach((storyArr, userId) => {
-        storyArr.sort((a, b) => a.createdAt - b.createdAt);
+    // Convert Map to array and sort by latest story timestamp
+    const sortedUsers = Array.from(storiesByUser.entries()).sort((a, b) => {
+        const storiesA = a[1];
+        const storiesB = b[1];
+
+        // Ensure stories are sorted by time within each user's list
+        storiesA.sort((s1, s2) => s1.createdAt - s2.createdAt);
+        storiesB.sort((s1, s2) => s1.createdAt - s2.createdAt);
+
+        const latestA = storiesA[storiesA.length - 1];
+        const latestB = storiesB[storiesB.length - 1];
+
+        // Sort users by latest story timestamp (descending)
+        // Handle potential missing createdAt (though filtered in subscribeToStories)
+        const timeA = latestA?.createdAt?.getTime() || 0;
+        const timeB = latestB?.createdAt?.getTime() || 0;
+
+        return timeB - timeA;
+    });
+
+    sortedUsers.forEach(([userId, storyArr]) => {
         const latestStory = storyArr[storyArr.length - 1];
         const card = document.createElement('button');
         card.className = 'story-card';
@@ -1546,6 +1655,43 @@ function formatMessageText(text) {
     return escapeHtml(text).replace(/\n/g, '<br>');
 }
 
+function isMediaMessage(messageData) {
+    if (!messageData || !messageData.imgUrl) return false;
+    return ['image', 'gif', 'sticker'].includes(messageData.type);
+}
+
+function getMediaAltText(type) {
+    switch (type) {
+        case 'gif':
+            return 'GIF';
+        case 'sticker':
+            return 'Sticker';
+        default:
+            return 'Image';
+    }
+}
+
+function getMessagePreviewText(messageData) {
+    if (!messageData) return '[Message]';
+    if (messageData.type === 'image') return '[Photo]';
+    if (messageData.type === 'gif') return '[GIF]';
+    if (messageData.type === 'sticker') return '[Sticker]';
+    if (messageData.text && messageData.text.trim()) {
+        return messageData.text.trim();
+    }
+    return '[Message]';
+}
+
+function createEmojiStickerDataUrl(emoji) {
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="320" height="320">
+            <rect width="100%" height="100%" rx="60" fill="#ffffff" fill-opacity="0.08"/>
+            <text x="50%" y="55%" font-size="200" text-anchor="middle" dominant-baseline="middle">${emoji}</text>
+        </svg>
+    `;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 // ===========================
 // Send Message
 // ===========================
@@ -1585,17 +1731,7 @@ async function sendMessage() {
             isDeleted: false
         };
 
-        // Add reply data if replying
-        if (replyingToMessage) {
-            messageData.replyTo = {
-                messageId: replyingToMessage.id,
-                senderId: replyingToMessage.senderId,
-                senderName: replyingToMessage.senderName,
-                text: replyingToMessage.text || '[Image]'
-            };
-        }
-
-        await addDoc(messagesRef, messageData);
+        await addDoc(messagesRef, applyReplyContext(messageData));
 
         messageInput.value = '';
         messageInput.style.height = 'auto';
@@ -1606,12 +1742,79 @@ async function sendMessage() {
     }
 }
 
+function applyReplyContext(messageData) {
+    if (replyingToMessage && messageData) {
+        messageData.replyTo = {
+            messageId: replyingToMessage.id,
+            senderId: replyingToMessage.senderId,
+            senderName: replyingToMessage.senderName || 'Unknown',
+            text: getMessagePreviewText(replyingToMessage)
+        };
+    }
+    return messageData;
+}
+
+async function sendMediaMessage(mediaUrl, messageType) {
+    if (!currentChatId || !mediaUrl || !currentUser) return;
+    const messagesRef = collection(db, 'chats', currentChatId, 'messages');
+    const payload = applyReplyContext({
+        imgUrl: mediaUrl,
+        senderId: currentUser.uid,
+        timestamp: serverTimestamp(),
+        type: messageType,
+        seen: false,
+        reactions: [],
+        isDeleted: false
+    });
+    await addDoc(messagesRef, payload);
+    if (replyingToMessage) {
+        cancelReply();
+    }
+    updateTypingStatus(false);
+}
+
+// ===========================
+// Media Menu
+// ===========================
+if (mediaMenuBtn) {
+    mediaMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (mediaMenu) {
+            mediaMenu.classList.toggle('hidden');
+        }
+    });
+}
+
+// Close media menu when clicking outside
+document.addEventListener('click', (e) => {
+    if (mediaMenu && !mediaMenu.contains(e.target) && e.target !== mediaMenuBtn) {
+        mediaMenu.classList.add('hidden');
+    }
+});
+
+// Handle media menu item clicks
+if (mediaMenu) {
+    mediaMenu.addEventListener('click', (e) => {
+        const menuItem = e.target.closest('.media-menu-item');
+        if (!menuItem) return;
+        
+        const action = menuItem.dataset.action;
+        mediaMenu.classList.add('hidden');
+        
+        if (action === 'image') {
+            imageInput.click();
+        } else if (action === 'gif') {
+            console.log('Opening GIF modal...');
+            openGifModal();
+        } else if (action === 'sticker') {
+            openStickerSheet();
+        }
+    });
+}
+
 // ===========================
 // Image Upload (Cloudinary)
 // ===========================
-imageUploadBtn.addEventListener('click', () => {
-    imageInput.click();
-});
 
 imageInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -1620,16 +1823,7 @@ imageInput.addEventListener('change', async (e) => {
     try {
         const secureUrl = await uploadImageToCloudinary(file);
         if (secureUrl) {
-            const messagesRef = collection(db, 'chats', currentChatId, 'messages');
-            await addDoc(messagesRef, {
-                imgUrl: secureUrl,
-                senderId: currentUser.uid,
-                timestamp: serverTimestamp(),
-                type: 'image',
-                seen: false,
-                reactions: [],
-                isDeleted: false
-            });
+            await sendMediaMessage(secureUrl, 'image');
         }
         imageInput.value = '';
     } catch (error) {
@@ -1637,6 +1831,373 @@ imageInput.addEventListener('change', async (e) => {
         alert('Failed to upload image. Please check your Cloudinary configuration.');
     }
 });
+
+// ===========================
+// GIF Picker (Tenor)
+// ===========================
+function openGifModal() {
+    if (!gifModal) {
+        console.error('GIF modal element not found');
+        return;
+    }
+    gifModal.classList.remove('hidden');
+    gifSearchInput?.focus();
+    
+    // Reset pagination when opening modal
+    if (!gifInitialLoadDone) {
+        gifCurrentOffset = 0;
+        gifCurrentQuery = '';
+        gifHasMore = true;
+        fetchGifResults('', 0, true);
+        gifInitialLoadDone = true;
+    }
+}
+
+function closeGifModal() {
+    if (!gifModal) return;
+    gifModal.classList.add('hidden');
+    if (gifAbortController) {
+        gifAbortController.abort();
+        gifAbortController = null;
+    }
+    // Reset pagination when closing
+    gifCurrentOffset = 0;
+    gifCurrentQuery = '';
+    gifHasMore = true;
+}
+
+function handleGifScroll() {
+    if (!gifResultsEl || gifLoadingMore || !gifHasMore) return;
+    
+    const scrollTop = gifResultsEl.scrollTop;
+    const scrollHeight = gifResultsEl.scrollHeight;
+    const clientHeight = gifResultsEl.clientHeight;
+    
+    // Load more when user is within 200px of bottom
+    if (scrollHeight - scrollTop - clientHeight < 200) {
+        console.log('Loading more GIFs...', 'offset:', gifCurrentOffset);
+        fetchGifResults(gifCurrentQuery, gifCurrentOffset, false);
+    }
+}
+
+function handleGifSearchInput(event) {
+    const query = event.target.value.trim();
+    if (gifSearchTimeout) {
+        clearTimeout(gifSearchTimeout);
+    }
+    gifSearchTimeout = setTimeout(() => {
+        // Reset pagination for new search
+        if (query !== gifCurrentQuery) {
+            gifCurrentOffset = 0;
+            gifCurrentQuery = query;
+            gifHasMore = true;
+            if (gifResultsEl) {
+                gifResultsEl.innerHTML = '';
+            }
+        }
+        fetchGifResults(query, 0, true);
+    }, 350);
+}
+
+async function fetchGifResults(query = '', offset = 0, reset = false) {
+    if (!gifResultsEl) return;
+    
+    // Don't load if already loading or no more results
+    if (gifLoadingMore || (!gifHasMore && !reset)) return;
+    
+    gifLoadingMore = true;
+    
+    if (reset) {
+        setGifLoading(true);
+        gifEmptyState?.classList.add('hidden');
+        if (offset === 0) {
+            gifResultsEl.innerHTML = '';
+        }
+    }
+
+    if (gifAbortController) {
+        gifAbortController.abort();
+    }
+    gifAbortController = new AbortController();
+
+    // Use Giphy API
+    const params = new URLSearchParams({
+        api_key: GIPHY_API_KEY,
+        limit: GIPHY_RESULT_LIMIT.toString(),
+        rating: 'g', // General audience
+        lang: 'en',
+        offset: offset.toString()
+    });
+    
+    let endpoint = 'trending';
+    if (query) {
+        params.set('q', query);
+        endpoint = 'search';
+    }
+
+    try {
+        const url = `https://api.giphy.com/v1/gifs/${endpoint}?${params.toString()}`;
+        console.log('Fetching GIFs from:', url, 'offset:', offset);
+        const response = await fetch(url, {
+            signal: gifAbortController.signal
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Giphy API error:', response.status, errorText);
+            throw new Error(`Giphy API returned ${response.status}: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log('GIF data received:', data);
+        
+        if (!data || !data.data) {
+            console.warn('Unexpected API response format:', data);
+            if (reset) {
+                showGifEmptyState('Unexpected response from GIF service. Please try again.');
+            }
+            return;
+        }
+        
+        const results = data.data || [];
+        const pagination = data.pagination || {};
+        
+        // Check if there are more results
+        const totalCount = pagination.total_count;
+        const currentCount = offset + results.length;
+        
+        // If we got a full page of results, assume there might be more
+        // If total_count is available, use it; otherwise assume more if we got full results
+        if (totalCount !== undefined && totalCount !== null) {
+            gifHasMore = currentCount < totalCount && results.length > 0;
+        } else {
+            // For trending or when total_count is not available, assume more if we got full results
+            gifHasMore = results.length >= GIPHY_RESULT_LIMIT;
+        }
+        
+        // Update offset
+        gifCurrentOffset = offset + results.length;
+        
+        renderGifResults(results, query, reset);
+    } catch (error) {
+        if (error.name === 'AbortError') return;
+        console.error('Error fetching GIFs:', error);
+        if (reset) {
+            const errorMessage = error.message || 'Unable to load GIFs right now. Please try again.';
+            showGifEmptyState(errorMessage);
+        }
+    } finally {
+        if (reset) {
+            setGifLoading(false);
+        }
+        gifLoadingMore = false;
+        gifAbortController = null;
+    }
+}
+
+function setGifLoading(isLoading) {
+    if (!gifLoadingEl) return;
+    gifLoadingEl.classList.toggle('hidden', !isLoading);
+}
+
+function renderGifResults(results, query, reset = true) {
+    if (!gifResultsEl) {
+        console.error('GIF results element not found');
+        return;
+    }
+    
+    // Only clear if resetting (new search or initial load)
+    if (reset) {
+        gifResultsEl.innerHTML = '';
+    }
+    
+    if (!results || !Array.isArray(results) || results.length === 0) {
+        if (reset) {
+            showGifEmptyState(query ? 'No GIFs match that vibe. Try a new word.' : 'Nothing trending right now. Try searching!');
+        }
+        return;
+    }
+
+    gifEmptyState?.classList.add('hidden');
+    let renderedCount = 0;
+    
+    results.forEach((gif) => {
+        try {
+            // Giphy API format: gif.images.downsized_medium.url (for sending) and gif.images.fixed_height_small.url (for preview)
+            const images = gif.images || {};
+            const previewUrl = images.fixed_height_small?.url || images.downsized_small?.url || images.preview_gif?.url;
+            const sendUrl = images.downsized_medium?.url || images.original?.url || images.fixed_height?.url;
+            
+            if (!previewUrl || !sendUrl) {
+                console.warn('GIF result missing URLs:', gif);
+                return;
+            }
+            
+            const card = document.createElement('div');
+            card.className = 'gif-card';
+            const img = document.createElement('img');
+            img.src = previewUrl;
+            img.alt = gif.title || gif.slug || 'GIF';
+            img.loading = 'lazy';
+            img.onerror = () => {
+                console.warn('Failed to load GIF preview:', previewUrl);
+                card.style.display = 'none';
+            };
+            card.appendChild(img);
+            card.addEventListener('click', () => {
+                console.log('GIF selected:', sendUrl);
+                handleGifSelect(sendUrl);
+            });
+            gifResultsEl.appendChild(card);
+            renderedCount++;
+        } catch (error) {
+            console.error('Error rendering GIF card:', error, gif);
+        }
+    });
+    
+    if (renderedCount === 0 && reset) {
+        showGifEmptyState('Could not load GIF previews. Please try again.');
+    } else if (renderedCount > 0) {
+        console.log(`Rendered ${renderedCount} GIFs${reset ? '' : ' (appended)'}`);
+    }
+}
+
+function showGifEmptyState(message) {
+    if (!gifEmptyState) return;
+    gifEmptyState.textContent = message;
+    gifEmptyState.classList.remove('hidden');
+}
+
+async function handleGifSelect(url) {
+    try {
+        await sendMediaMessage(url, 'gif');
+        closeGifModal();
+    } catch (error) {
+        console.error('Error sending GIF:', error);
+        alert('Could not send this GIF. Please try a different one.');
+    }
+}
+
+// ===========================
+// Stickers
+// ===========================
+function openStickerSheet() {
+    if (!stickerSheet) return;
+    stickerSheet.classList.remove('hidden');
+}
+
+function closeStickerSheet() {
+    if (!stickerSheet) return;
+    stickerSheet.classList.add('hidden');
+}
+
+function renderDefaultStickers() {
+    if (!defaultStickerGrid) return;
+    defaultStickerGrid.innerHTML = '';
+    DEFAULT_STICKERS.forEach((sticker) => {
+        defaultStickerGrid.appendChild(createStickerCard(sticker.url, sticker.emoji));
+    });
+}
+
+function renderCustomStickers() {
+    if (!customStickerGrid || !customStickerSection) return;
+    customStickerGrid.innerHTML = '';
+    if (!customStickers.length) {
+        customStickerSection.classList.add('hidden');
+        return;
+    }
+    customStickerSection.classList.remove('hidden');
+    customStickers.forEach((sticker) => {
+        customStickerGrid.appendChild(createStickerCard(sticker.url, 'My sticker'));
+    });
+}
+
+function createStickerCard(url, label) {
+    const card = document.createElement('div');
+    card.className = 'sticker-card';
+    card.title = label || 'Sticker';
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = label || 'Sticker';
+    card.appendChild(img);
+    card.addEventListener('click', () => handleStickerSelect(url));
+    return card;
+}
+
+async function handleStickerSelect(url) {
+    try {
+        await sendMediaMessage(url, 'sticker');
+        closeStickerSheet();
+    } catch (error) {
+        console.error('Error sending sticker:', error);
+        alert('Could not send this sticker. Please try again.');
+    }
+}
+
+async function handleStickerUpload(event) {
+    const file = event.target.files ? event.target.files[0] : null;
+    if (!file || !currentChatId) return;
+
+    try {
+        if (addStickerBtn) {
+            addStickerBtn.disabled = true;
+            addStickerBtn.textContent = 'Uploading…';
+        }
+        const secureUrl = await uploadImageToCloudinary(file);
+        if (secureUrl) {
+            customStickers = [{ id: `custom-${Date.now()}`, url: secureUrl }, ...customStickers].slice(0, 40);
+            persistCustomStickers();
+            renderCustomStickers();
+            await sendMediaMessage(secureUrl, 'sticker');
+            closeStickerSheet();
+        }
+    } catch (error) {
+        console.error('Error creating sticker:', error);
+        alert('Unable to turn that photo into a sticker right now.');
+    } finally {
+        if (stickerFileInput) {
+            stickerFileInput.value = '';
+        }
+        if (addStickerBtn) {
+            addStickerBtn.disabled = false;
+            addStickerBtn.textContent = 'Create from photo';
+        }
+    }
+}
+
+function getStickerStorageKey(uid) {
+    return `${CUSTOM_STICKERS_KEY_PREFIX}:${uid}`;
+}
+
+function loadCustomStickers(uid) {
+    if (typeof localStorage === 'undefined') {
+        customStickers = [];
+        renderCustomStickers();
+        return;
+    }
+    if (!uid) {
+        customStickers = [];
+        renderCustomStickers();
+        return;
+    }
+    try {
+        const stored = localStorage.getItem(getStickerStorageKey(uid));
+        customStickers = stored ? JSON.parse(stored) : [];
+    } catch (error) {
+        console.warn('Could not parse saved stickers', error);
+        customStickers = [];
+    }
+    renderCustomStickers();
+}
+
+function persistCustomStickers() {
+    if (!currentUser || typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(getStickerStorageKey(currentUser.uid), JSON.stringify(customStickers));
+    } catch (error) {
+        console.warn('Could not save stickers locally', error);
+    }
+}
 
 // ===========================
 // Typing Indicator
@@ -1724,8 +2285,9 @@ function setReplyTo(messageData) {
     const replyToName = document.querySelector('.reply-to-name');
     const replyPreviewText = document.querySelector('.reply-preview-text');
 
-    replyToName.textContent = `Replying to ${messageData.senderName}`;
-    replyPreviewText.textContent = messageData.text || '[Image]';
+    const senderName = messageData.senderName || 'Unknown';
+    replyToName.textContent = `Replying to ${senderName}`;
+    replyPreviewText.textContent = getMessagePreviewText(messageData);
 
     messageInput.focus();
 }

@@ -78,6 +78,32 @@
                     <h2>Messages</h2>
                     <button id="logout-btn" class="logout-icon" title="Logout">⎋</button>
                 </div>
+                <div class="current-user-profile">
+                    <div class="current-user-avatar-block">
+                        <div class="user-avatar current-user-avatar" id="current-user-avatar">?</div>
+                        <div class="online-indicator hidden" id="current-user-indicator"></div>
+                    </div>
+                    <div class="current-user-info">
+                        <div class="current-user-meta">
+                            <div class="current-user-name" id="current-user-name">You</div>
+                            <span class="current-user-presence" id="current-user-status">offline</span>
+                        </div>
+                        <div class="current-user-email" id="current-user-email"></div>
+                        <div class="current-user-tagline" id="current-user-tagline">Add a status</div>
+                    </div>
+                    <button id="edit-profile-btn" class="profile-edit-btn">Edit</button>
+                </div>
+                <div class="story-strip" id="story-strip">
+                    <button class="story-card add" id="add-story-btn">
+                        <div class="story-avatar">
+                            <span>+</span>
+                        </div>
+                        <small>Add story</small>
+                    </button>
+                    <div class="story-list" id="story-list"></div>
+                </div>
+                <input type="file" id="profile-avatar-input" accept="image/*" class="hidden">
+                <input type="file" id="story-file-input" accept="image/*" class="hidden">
                 <div class="user-list" id="user-list">
                     <!-- Users will be dynamically loaded here -->
                 </div>
@@ -88,7 +114,7 @@
                 <div class="chat-window-header">
                     <button id="back-to-users" class="back-btn">←</button>
                     <div class="chat-user-info">
-                        <img id="chat-user-avatar" src="" alt="Avatar" class="chat-avatar">
+                        <div id="chat-user-avatar" class="chat-avatar">?</div>
                         <div>
                             <div id="chat-user-name">Select a user</div>
                             <div id="chat-user-status" class="user-status">offline</div>
@@ -122,8 +148,10 @@
                 <div class="message-input-container">
                     <button id="image-upload-btn" class="icon-btn" title="Upload Image">📎</button>
                     <input type="file" id="image-input" accept="image/*" class="hidden">
-                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
-                    <button id="send-btn" class="send-btn">Send</button>
+                    <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
+                    <button id="send-btn" class="send-btn" title="Send">
+                        <span class="send-btn-icon">➤</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -144,6 +172,69 @@
         <button class="option-btn" data-action="reply">Reply</button>
         <button class="option-btn" data-action="edit">Edit</button>
         <button class="option-btn" data-action="delete">Delete</button>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal hidden profile-modal">
+        <div class="modal-content profile-modal-content">
+            <span class="close-modal" id="close-profile-modal">&times;</span>
+            <h2>Edit Profile</h2>
+            <div class="profile-modal-body">
+                <div class="profile-avatar-preview">
+                    <div class="avatar-ring">
+                        <div class="user-avatar large" id="profile-avatar-circle">?</div>
+                    </div>
+                    <button id="change-avatar-btn" class="secondary">Change photo</button>
+                </div>
+                <label for="profile-name-input">Display name</label>
+                <input type="text" id="profile-name-input" placeholder="Display name">
+                <label for="profile-passcode-input">Passcode</label>
+                <input type="text" id="profile-passcode-input" placeholder="Unlock passcode">
+                <label for="profile-status-input">Status message</label>
+                <textarea id="profile-status-input" rows="2" placeholder="Let friends know what you're up to"></textarea>
+                <div class="profile-modal-actions">
+                    <button id="cancel-profile-btn" class="secondary">Cancel</button>
+                    <button id="save-profile-btn">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Story Viewer -->
+    <div id="story-viewer" class="story-viewer hidden">
+        <div class="story-viewer-backdrop"></div>
+        <div class="story-viewer-content">
+            <button id="story-viewer-close" class="story-viewer-close">×</button>
+            <div class="story-progress" id="story-progress"></div>
+            <div class="story-viewer-header">
+                <div class="story-viewer-user">
+                    <div class="user-avatar" id="story-viewer-avatar">?</div>
+                    <div>
+                        <div id="story-viewer-name">Name</div>
+                        <div id="story-viewer-time" class="story-viewer-time">Just now</div>
+                    </div>
+                </div>
+                <div class="story-viewer-controls">
+                    <button id="story-prev-btn" class="story-nav-btn">‹</button>
+                    <button id="story-next-btn" class="story-nav-btn">›</button>
+                </div>
+            </div>
+            <img id="story-viewer-media" src="" alt="Story" class="story-viewer-media">
+            <div class="story-viewer-footer">
+                <button id="story-like-btn" class="story-like-btn">♡</button>
+                <span id="story-like-count" class="story-like-count">0 likes</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="image-viewer" class="image-viewer hidden">
+        <div class="image-viewer-backdrop"></div>
+        <div class="image-viewer-content">
+            <button id="image-viewer-close" class="image-viewer-close">×</button>
+            <img id="image-viewer-img" src="" alt="Preview" class="image-viewer-img">
+            <a id="image-viewer-download" class="image-viewer-download" download>Download</a>
+        </div>
     </div>
 
     <!-- Firebase SDK -->

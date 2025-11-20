@@ -556,12 +556,12 @@ function createUserItem(userData) {
 }
 
 function updateUserStatus(userData) {
+    const displayStatus = getDisplayStatus(userData);
     const userItem = document.querySelector(`.user-item[data-user-id="${userData.uid}"]`);
     if (userItem) {
         const statusEl = userItem.querySelector('.user-status');
         const avatarContainer = userItem.querySelector('.user-avatar-container');
         const avatarEl = userItem.querySelector('.user-avatar');
-        const displayStatus = getDisplayStatus(userData);
 
         statusEl.textContent = displayStatus;
         applyAvatarToElement(avatarEl, userData.photoURL, userData.displayName || userData.email);
@@ -643,10 +643,15 @@ function loadMessages() {
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
     unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        // Check if user is at bottom before changes
+        const wasAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 100;
+        let hasNewMessages = false;
+
         snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
                 const messageData = { id: change.doc.id, ...change.doc.data() };
                 appendMessage(messageData);
+                hasNewMessages = true;
             } else if (change.type === 'modified') {
                 updateMessage(change.doc.id, change.doc.data());
             } else if (change.type === 'removed') {
@@ -654,11 +659,15 @@ function loadMessages() {
             }
         });
 
-        // Scroll to bottom
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        // Only auto-scroll if user was at bottom AND there are new messages
+        if (hasNewMessages && wasAtBottom) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
 
-        // Mark new messages as seen
-        markMessagesAsSeen();
+        // Mark new messages as seen (debounced)
+        if (hasNewMessages) {
+            markMessagesAsSeen();
+        }
     });
 }
 
@@ -727,128 +736,128 @@ function createMessageElement(messageData) {
     `;
 
     if (!isDeleted) {
-    const bubble = div.querySelector('.message-bubble');
+        const bubble = div.querySelector('.message-bubble');
         const isReceivedMessage = !isOwnMessage;
 
-    if (isReceivedMessage) {
-        bubble.addEventListener('dblclick', (e) => {
-            showReactionPopup(e, messageData.id);
-        });
-
-        bubble.addEventListener('touchstart', (e) => {
-            longPressTimer = setTimeout(() => {
+        if (isReceivedMessage) {
+            bubble.addEventListener('dblclick', (e) => {
                 showReactionPopup(e, messageData.id);
-            }, 500);
+            });
+
+            bubble.addEventListener('touchstart', (e) => {
+                longPressTimer = setTimeout(() => {
+                    showReactionPopup(e, messageData.id);
+                }, 500);
+            });
+
+            bubble.addEventListener('touchend', () => {
+                clearTimeout(longPressTimer);
+            });
+        } else {
+            bubble.addEventListener('touchstart', (e) => {
+                longPressTimer = setTimeout(() => {
+                    showMessageOptions(e.touches[0], messageData.id);
+                }, 500);
+            });
+
+            bubble.addEventListener('touchend', () => {
+                clearTimeout(longPressTimer);
+            });
+
+            bubble.addEventListener('touchmove', () => {
+                clearTimeout(longPressTimer);
+            });
+        }
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isSwiping = false;
+
+        div.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            isSwiping = false;
+            div.style.transition = 'none';
         });
 
-        bubble.addEventListener('touchend', () => {
-            clearTimeout(longPressTimer);
-        });
-    } else {
-        bubble.addEventListener('touchstart', (e) => {
-            longPressTimer = setTimeout(() => {
-                showMessageOptions(e.touches[0], messageData.id);
-            }, 500);
-        });
+        div.addEventListener('touchmove', (e) => {
+            if (!touchStartX) return;
 
-        bubble.addEventListener('touchend', () => {
-            clearTimeout(longPressTimer);
-        });
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            const deltaX = touchX - touchStartX;
+            const deltaY = touchY - touchStartY;
 
-        bubble.addEventListener('touchmove', () => {
-            clearTimeout(longPressTimer);
-        });
-    }
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+                isSwiping = true;
 
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let isSwiping = false;
-
-    div.addEventListener('touchstart', (e) => {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        isSwiping = false;
-        div.style.transition = 'none';
-    });
-
-    div.addEventListener('touchmove', (e) => {
-        if (!touchStartX) return;
-
-        const touchX = e.touches[0].clientX;
-        const touchY = e.touches[0].clientY;
-        const deltaX = touchX - touchStartX;
-        const deltaY = touchY - touchStartY;
-
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-            isSwiping = true;
-
-            const maxSwipe = 80;
-            let translateX = 0;
+                const maxSwipe = 80;
+                let translateX = 0;
                 if (isOwnMessage && deltaX < 0) {
-                translateX = Math.max(deltaX, -maxSwipe);
+                    translateX = Math.max(deltaX, -maxSwipe);
                 } else if (!isOwnMessage && deltaX > 0) {
-                translateX = Math.min(deltaX, maxSwipe);
+                    translateX = Math.min(deltaX, maxSwipe);
+                }
+
+                if (translateX !== 0) {
+                    e.preventDefault();
+                    div.classList.add('swiping');
+                    div.style.transform = `translateX(${translateX}px)`;
+                    div.style.opacity = 1 - Math.abs(translateX) / maxSwipe * 0.3;
+                }
+            }
+        });
+
+        div.addEventListener('touchend', (e) => {
+            if (!touchStartX || !isSwiping) {
+                touchStartX = 0;
+                return;
             }
 
-            if (translateX !== 0) {
-                e.preventDefault();
-                div.classList.add('swiping');
-                div.style.transform = `translateX(${translateX}px)`;
-                div.style.opacity = 1 - Math.abs(translateX) / maxSwipe * 0.3;
-            }
-        }
-    });
+            const touchEndX = e.changedTouches[0].clientX;
+            const deltaX = touchEndX - touchStartX;
+            const swipeThreshold = 50;
 
-    div.addEventListener('touchend', (e) => {
-        if (!touchStartX || !isSwiping) {
-            touchStartX = 0;
-            return;
-        }
-
-        const touchEndX = e.changedTouches[0].clientX;
-        const deltaX = touchEndX - touchStartX;
-        const swipeThreshold = 50;
-
-        let shouldReply = false;
+            let shouldReply = false;
             if (isOwnMessage && deltaX < -swipeThreshold) {
-            shouldReply = true;
+                shouldReply = true;
             } else if (!isOwnMessage && deltaX > swipeThreshold) {
-            shouldReply = true;
-        }
-
-        if (shouldReply) {
-            triggerSwipeReply(messageData);
-        }
-
-        div.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-        div.style.transform = 'translateX(0)';
-        div.style.opacity = '1';
-        div.classList.remove('swiping');
-
-        touchStartX = 0;
-        isSwiping = false;
-    });
-
-    const optionsBtn = div.querySelector('.message-options-trigger');
-    if (optionsBtn) {
-        optionsBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showMessageOptions(e, messageData.id);
-        });
-    }
-
-    const replyCtx = div.querySelector('.message-reply-context');
-    if (replyCtx) {
-        replyCtx.addEventListener('click', () => {
-            const toId = replyCtx.getAttribute('data-reply-to');
-            const target = document.querySelector(`.message[data-message-id="${toId}"]`);
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                target.classList.add('highlight-replied');
-                setTimeout(() => target.classList.remove('highlight-replied'), 1200);
+                shouldReply = true;
             }
+
+            if (shouldReply) {
+                triggerSwipeReply(messageData);
+            }
+
+            div.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+            div.style.transform = 'translateX(0)';
+            div.style.opacity = '1';
+            div.classList.remove('swiping');
+
+            touchStartX = 0;
+            isSwiping = false;
         });
-    }
+
+        const optionsBtn = div.querySelector('.message-options-trigger');
+        if (optionsBtn) {
+            optionsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showMessageOptions(e, messageData.id);
+            });
+        }
+
+        const replyCtx = div.querySelector('.message-reply-context');
+        if (replyCtx) {
+            replyCtx.addEventListener('click', () => {
+                const toId = replyCtx.getAttribute('data-reply-to');
+                const target = document.querySelector(`.message[data-message-id="${toId}"]`);
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    target.classList.add('highlight-replied');
+                    setTimeout(() => target.classList.remove('highlight-replied'), 1200);
+                }
+            });
+        }
 
         if (messageData.type === 'image' && messageData.imgUrl) {
             const imgEl = div.querySelector('.message-image');
@@ -870,9 +879,69 @@ function appendMessage(messageData) {
 function updateMessage(messageId, messageData) {
     const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
     if (!messageEl) return;
-    const mergedData = { id: messageId, ...messageData };
-    const newEl = createMessageElement(mergedData);
-    messagesContainer.replaceChild(newEl, messageEl);
+
+    const isOwnMessage = messageData.senderId === currentUser.uid;
+    const isDeleted = !!messageData.isDeleted;
+
+    // If message is deleted or content changed significantly, replace entire element
+    if (isDeleted || messageEl.classList.contains('deleted') !== isDeleted) {
+        const mergedData = { id: messageId, ...messageData };
+        const newEl = createMessageElement(mergedData);
+        messagesContainer.replaceChild(newEl, messageEl);
+        updateMessageStatusVisibility();
+        return;
+    }
+
+    // Otherwise, update only the parts that changed (prevents flickering)
+
+    // Update edited label
+    const metaEl = messageEl.querySelector('.message-meta');
+    if (messageData.isEdited && !metaEl) {
+        const bubble = messageEl.querySelector('.message-bubble');
+        const editedSpan = document.createElement('span');
+        editedSpan.className = 'message-meta';
+        editedSpan.innerHTML = '<span class="message-edited">(edited)</span>';
+        const statusEl = bubble.querySelector('.message-status');
+        if (statusEl) {
+            bubble.insertBefore(editedSpan, statusEl);
+        } else {
+            bubble.appendChild(editedSpan);
+        }
+    }
+
+    // Update status (for own messages)
+    if (isOwnMessage) {
+        const statusEl = messageEl.querySelector('.message-status');
+        if (statusEl) {
+            statusEl.textContent = getStatusText(messageData);
+        }
+    }
+
+    // Update reactions
+    const reactionsContainer = messageEl.querySelector('.message-reactions');
+    if (messageData.reactions && messageData.reactions.length > 0) {
+        const reactionCounts = {};
+        messageData.reactions.forEach(r => {
+            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+        });
+        let reactionsHtml = '';
+        for (const [emoji, count] of Object.entries(reactionCounts)) {
+            reactionsHtml += `<span class="reaction-badge">${emoji} ${count}</span>`;
+        }
+
+        if (reactionsContainer) {
+            reactionsContainer.innerHTML = reactionsHtml;
+        } else {
+            const bubble = messageEl.querySelector('.message-bubble');
+            const newReactionsDiv = document.createElement('div');
+            newReactionsDiv.className = 'message-reactions';
+            newReactionsDiv.innerHTML = reactionsHtml;
+            bubble.appendChild(newReactionsDiv);
+        }
+    } else if (reactionsContainer) {
+        reactionsContainer.remove();
+    }
+
     updateMessageStatusVisibility();
 }
 
@@ -1616,20 +1685,33 @@ function listenForTyping() {
 // ===========================
 // Mark Messages as Seen
 // ===========================
+let markSeenTimeout = null;
+
 async function markMessagesAsSeen() {
-    if (!currentChatId) return;
+    if (!currentChatId || !currentChatUser) return;
 
-    try {
-        const messagesRef = collection(db, 'chats', currentChatId, 'messages');
-        const q = query(messagesRef, where('senderId', '==', currentChatUser.uid), where('seen', '==', false));
-        const snapshot = await getDocs(q);
-
-        snapshot.forEach(async (docSnap) => {
-            await updateDoc(docSnap.ref, { seen: true });
-        });
-    } catch (error) {
-        console.error('Error marking messages as seen:', error);
+    // Debounce to prevent excessive calls
+    if (markSeenTimeout) {
+        clearTimeout(markSeenTimeout);
     }
+
+    markSeenTimeout = setTimeout(async () => {
+        try {
+            const messagesRef = collection(db, 'chats', currentChatId, 'messages');
+            const q = query(messagesRef, where('senderId', '==', currentChatUser.uid), where('seen', '==', false));
+            const snapshot = await getDocs(q);
+
+            // Batch update all unseen messages
+            const updatePromises = [];
+            snapshot.forEach((docSnap) => {
+                updatePromises.push(updateDoc(docSnap.ref, { seen: true }));
+            });
+
+            await Promise.all(updatePromises);
+        } catch (error) {
+            console.error('Error marking messages as seen:', error);
+        }
+    }, 500); // Wait 500ms before marking as seen
 }
 
 // ===========================

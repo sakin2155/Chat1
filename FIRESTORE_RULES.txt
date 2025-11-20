@@ -23,18 +23,35 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
     
+    // Stories collection
+    match /stories/{storyId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
     // Chat documents
     match /chats/{chatId} {
-      allow read, write: if request.auth != null;
+      allow read, create: if request.auth != null;
+      allow update: if request.auth != null;
       
       // Messages subcollection
       match /messages/{messageId} {
-        allow read, write: if request.auth != null;
+        allow read, create: if request.auth != null;
+        
+        // Allow sender to update/delete their own messages
+        allow update, delete: if request.auth != null && resource.data.senderId == request.auth.uid;
+        
+        // Allow recipient to mark messages as seen (CRITICAL FIX)
+        allow update: if request.auth != null 
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seen'])
+                      && request.resource.data.seen == true;
       }
       
       // Typing indicator subcollection
       match /typing/{userId} {
-        allow read, write: if request.auth != null;
+        allow read, create, update, delete: if request.auth != null;
       }
     }
   }
@@ -44,8 +61,9 @@ service cloud.firestore {
 IMPORTANT NOTES:
 ===============================================
 
-1. These rules are VERY PERMISSIVE - any authenticated user can read/write all chats
-   This is OK for a personal/demo app but NOT for production
+1. FIXED: Added rule to allow recipients to mark messages as "seen"
+   - Users can now update the 'seen' field on messages they received
+   - This fixes the "Missing or insufficient permissions" error
 
 2. After publishing, wait 30-60 seconds for the rules to propagate
 

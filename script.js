@@ -99,6 +99,7 @@ let storyUploadInProgress = false;
 let storyProgressRaf = null;
 let storyProgressStart = null;
 let storyProgressFillEl = null;
+let storyProgressDuration = STORY_AUTO_ADVANCE_MS;
 let gifSearchTimeout = null;
 let gifInitialLoadDone = false;
 let gifAbortController = null;
@@ -1263,12 +1264,12 @@ function renderStories(stories = []) {
         const storiesA = a[1];
         const storiesB = b[1];
 
-        // Ensure stories are sorted by time within each user's list
-        storiesA.sort((s1, s2) => s1.createdAt - s2.createdAt);
-        storiesB.sort((s1, s2) => s1.createdAt - s2.createdAt);
+        // Sort stories DESCENDING (latest first)
+        storiesA.sort((s1, s2) => s2.createdAt - s1.createdAt);
+        storiesB.sort((s1, s2) => s2.createdAt - s1.createdAt);
 
-        const latestA = storiesA[storiesA.length - 1];
-        const latestB = storiesB[storiesB.length - 1];
+        const latestA = storiesA[0]; // First item is now the latest
+        const latestB = storiesB[0];
 
         // Sort users by latest story timestamp (descending)
         // Handle potential missing createdAt (though filtered in subscribeToStories)
@@ -1279,7 +1280,7 @@ function renderStories(stories = []) {
     });
 
     sortedUsers.forEach(([userId, storyArr]) => {
-        const latestStory = storyArr[storyArr.length - 1];
+        const latestStory = storyArr[0]; // First item is now the latest
         const card = document.createElement('button');
         card.className = 'story-card';
         card.type = 'button';
@@ -1359,6 +1360,13 @@ function showStoryAtIndex(index) {
             video.muted = false;
             video.controls = false;
             video.playsInline = true;
+
+            // Handle video end event - auto-advance when video finishes
+            video.addEventListener('ended', () => {
+                stopStoryProgress();
+                navigateStory(1);
+            });
+
             storyViewerMediaContainer.appendChild(video);
         } else {
             const img = document.createElement('img');
@@ -1380,7 +1388,23 @@ function showStoryAtIndex(index) {
     markStoryViewed(story);
     updateStoryLikeUI(story);
     renderStoryProgressBars();
-    startStoryProgress();
+
+    // For videos, wait for metadata to load before starting progress
+    const mediaElement = storyViewerMediaContainer?.querySelector('video, img');
+    if (mediaElement && mediaElement.tagName === 'VIDEO') {
+        if (mediaElement.readyState >= 1) {
+            // Metadata already loaded
+            startStoryProgress();
+        } else {
+            // Wait for metadata to load
+            mediaElement.addEventListener('loadedmetadata', () => {
+                startStoryProgress();
+            }, { once: true });
+        }
+    } else {
+        // For images, start immediately
+        startStoryProgress();
+    }
 }
 
 function updateStoryNavButtons() {
@@ -1434,7 +1458,21 @@ function renderStoryProgressBars() {
 
 function startStoryProgress() {
     if (!storyProgressFillEl) return;
+
+    const mediaElement = storyViewerMediaContainer?.querySelector('video, img');
+
+    // For videos, use video duration; for images, use fixed duration
+    let duration = STORY_AUTO_ADVANCE_MS;
+
+    if (mediaElement && mediaElement.tagName === 'VIDEO') {
+        const videoDuration = mediaElement.duration;
+        if (videoDuration && !isNaN(videoDuration) && isFinite(videoDuration)) {
+            duration = videoDuration * 1000; // Convert to milliseconds
+        }
+    }
+
     storyProgressStart = performance.now();
+    storyProgressDuration = duration;
     storyProgressFillEl.style.width = '0%';
     storyProgressRaf = requestAnimationFrame(updateStoryProgressFrame);
 }
@@ -1445,7 +1483,7 @@ function updateStoryProgressFrame(timestamp) {
         return;
     }
     const elapsed = timestamp - (storyProgressStart || timestamp);
-    const progress = Math.min(1, elapsed / STORY_AUTO_ADVANCE_MS);
+    const progress = Math.min(1, elapsed / storyProgressDuration);
     storyProgressFillEl.style.width = `${progress * 100}%`;
     if (progress >= 1) {
         stopStoryProgress();

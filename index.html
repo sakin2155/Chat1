@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Calculator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Calculator View (Default Visible) -->
+    <div id="calculator-view">
+        <div class="calculator-container">
+            <div class="calculator-header">
+                <button id="login-trigger" class="login-icon" title="Settings">π</button>
+            </div>
+            <div class="calculator-display">
+                <div id="display">0</div>
+            </div>
+            <div class="calculator-buttons">
+                <button class="btn function" data-action="clear">AC</button>
+                <button class="btn function" data-action="toggle-sign">+/-</button>
+                <button class="btn function" data-action="percent">%</button>
+                <button class="btn operator" data-action="divide">÷</button>
+
+                <button class="btn number" data-value="7">7</button>
+                <button class="btn number" data-value="8">8</button>
+                <button class="btn number" data-value="9">9</button>
+                <button class="btn operator" data-action="multiply">×</button>
+
+                <button class="btn number" data-value="4">4</button>
+                <button class="btn number" data-value="5">5</button>
+                <button class="btn number" data-value="6">6</button>
+                <button class="btn operator" data-action="subtract">−</button>
+
+                <button class="btn number" data-value="1">1</button>
+                <button class="btn number" data-value="2">2</button>
+                <button class="btn number" data-value="3">3</button>
+                <button class="btn operator" data-action="add">+</button>
+
+                <button class="btn number zero" data-value="0">0</button>
+                <button class="btn number" data-value=".">.</button>
+                <button class="btn operator" data-action="equals" id="equals-btn">=</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal (Hidden by Default) -->
+    <div id="login-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Login</h2>
+            <div id="login-form">
+                <input type="email" id="login-email" placeholder="Email" required>
+                <input type="password" id="login-password" placeholder="Password" required>
+                <button id="login-btn">Login</button>
+                <button id="signup-btn" class="secondary">Sign Up</button>
+            </div>
+            <div id="signup-form" class="hidden">
+                <input type="email" id="signup-email" placeholder="Email" required>
+                <input type="password" id="signup-password" placeholder="Password" required>
+                <input type="text" id="signup-name" placeholder="Display Name" required>
+                <input type="text" id="signup-passcode" placeholder="Passcode (e.g., 1234)" required>
+                <button id="create-account-btn">Create Account</button>
+                <button id="back-to-login-btn" class="secondary">Back to Login</button>
+            </div>
+            <div id="auth-error" class="error-message"></div>
+        </div>
+    </div>
+
+    <!-- Chat App (Hidden by Default) -->
+    <div id="chat-app" class="hidden">
+        <div class="chat-container">
+            <!-- User List Sidebar -->
+            <div class="user-list-container" id="user-list-container">
+                <div class="chat-header">
+                    <h2>Messages</h2>
+                    <button id="logout-btn" class="logout-icon" title="Logout">⎋</button>
+                </div>
+                <div class="user-list" id="user-list">
+                    <!-- Users will be dynamically loaded here -->
+                </div>
+            </div>
+
+            <!-- Chat Window -->
+            <div class="chat-window-container" id="chat-window-container">
+                <div class="chat-window-header">
+                    <button id="back-to-users" class="back-btn">←</button>
+                    <div class="chat-user-info">
+                        <img id="chat-user-avatar" src="" alt="Avatar" class="chat-avatar">
+                        <div>
+                            <div id="chat-user-name">Select a user</div>
+                            <div id="chat-user-status" class="user-status">offline</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="messages-container" id="messages-container">
+                    <!-- Messages will be dynamically loaded here -->
+                </div>
+
+                <div class="typing-indicator hidden" id="typing-indicator">
+                    <div class="typing-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+
+                <div class="message-input-container">
+                    <button id="image-upload-btn" class="icon-btn" title="Upload Image">📎</button>
+                    <input type="file" id="image-input" accept="image/*" class="hidden">
+                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+                    <button id="send-btn" class="send-btn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reaction Popup (Hidden by Default) -->
+    <div id="reaction-popup" class="reaction-popup hidden">
+        <button class="reaction-btn" data-emoji="👍">👍</button>
+        <button class="reaction-btn" data-emoji="❤️">❤️</button>
+        <button class="reaction-btn" data-emoji="😂">😂</button>
+        <button class="reaction-btn" data-emoji="😮">😮</button>
+        <button class="reaction-btn" data-emoji="😢">😢</button>
+        <button class="reaction-btn" data-emoji="🔥">🔥</button>
+    </div>
+
+    <!-- Message Options Menu (Hidden by Default) -->
+    <div id="message-options" class="message-options hidden">
+        <button class="option-btn" data-action="edit">Edit</button>
+        <button class="option-btn" data-action="delete">Delete</button>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

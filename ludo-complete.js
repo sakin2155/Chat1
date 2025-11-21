@@ -44,11 +44,15 @@ const db = getFirestore(app);
 let currentUser = null;
 let currentUserData = null;
 let roomId = null;
-let gameMode = null; // 'host' or 'join'
-let currentPlayer = 'red'; // 'red' or 'yellow'
+let gameMode = null;
+let currentPlayer = 'red';
 let opponentData = null;
+let gameActive = false;
+let gameOver = false;
+let winner = null;
+let diceResult = 0;
 
-// Game pieces: [{id: 'r1', pos: -1}, ...]
+// Game pieces
 let redPieces = [
     { id: 'r1', pos: -1 },
     { id: 'r2', pos: -1 },
@@ -62,11 +66,6 @@ let yellowPieces = [
     { id: 'y3', pos: -1 },
     { id: 'y4', pos: -1 }
 ];
-
-let diceResult = 0;
-let gameActive = false;
-let gameOver = false;
-let winner = null;
 
 // ===========================
 // DOM Elements
@@ -93,31 +92,6 @@ const yellowTurn = document.getElementById('yellow-turn');
 const chatInput = document.getElementById('chat-input');
 const sendChatBtn = document.getElementById('send-chat-btn');
 const chatMessages = document.getElementById('chat-messages');
-const pathGrid = document.getElementById('path-grid');
-const redHome = document.getElementById('red-home');
-const yellowHome = document.getElementById('yellow-home');
-
-// ===========================
-// Ludo Path System
-// ===========================
-// 52 cells in main path (0-51)
-// Red starts at 0, Yellow starts at 26
-const PATH_LENGTH = 52;
-const RED_START = 0;
-const YELLOW_START = 26;
-const HOME_LENGTH = 6;
-
-// Path coordinates (simplified grid positions)
-const pathMap = generatePathCoordinates();
-
-function generatePathCoordinates() {
-    const path = [];
-    // This is a simplified path - in real Ludo, it follows the board edges
-    for (let i = 0; i < PATH_LENGTH; i++) {
-        path.push({ x: i % 13, y: Math.floor(i / 13) });
-    }
-    return path;
-}
 
 // ===========================
 // Utility Functions
@@ -167,11 +141,8 @@ function getUrlParams() {
 }
 
 // ===========================
-// Dice System & Turn Management
+// Dice System
 // ===========================
-let lastDiceRoll = 0;
-let consecutiveSixes = 0;
-
 function rollDice() {
     if (!gameActive) return;
     
@@ -189,57 +160,15 @@ function rollDice() {
 
     setTimeout(() => {
         diceResult = Math.floor(Math.random() * 6) + 1;
-        lastDiceRoll = diceResult;
         dice.textContent = diceResult;
         dice.classList.remove('rolling');
-        
-        // Rule: Track consecutive 6s for bonus rolls
-        if (diceResult === 6) {
-            consecutiveSixes++;
-            diceResult_el.textContent = `Rolled: ${diceResult} 🎲 (Bonus Roll!)`;
-        } else {
-            consecutiveSixes = 0;
-            diceResult_el.textContent = `Rolled: ${diceResult}`;
-        }
+        diceResult_el.textContent = `Rolled: ${diceResult}`;
 
         // Save to Firestore
         saveDiceRoll(diceResult);
         
-        // Show valid moves
-        const validMoves = getValidMoves(diceResult);
-        if (validMoves.length === 0) {
-            diceResult_el.textContent += ' (No valid moves)';
-            // Pass turn after 2 seconds
-            setTimeout(() => {
-                passTurn();
-            }, 2000);
-        } else {
-            diceResult_el.textContent += ` (${validMoves.length} pieces can move)`;
-        }
-        
         rollDiceBtn.disabled = false;
     }, 600);
-}
-
-function passTurn() {
-    // Rule: If rolled 6, get another turn (unless 3 consecutive 6s)
-    if (lastDiceRoll === 6 && consecutiveSixes < 3) {
-        diceResult_el.textContent = 'Your bonus turn! Roll again.';
-        return;
-    }
-    
-    // Pass turn to opponent
-    consecutiveSixes = 0;
-    const nextPlayer = currentPlayer === 'red' ? 'yellow' : 'red';
-    
-    try {
-        setDoc(doc(db, 'games', roomId), {
-            currentPlayer: nextPlayer,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
-    } catch (error) {
-        console.error('Error passing turn:', error);
-    }
 }
 
 async function saveDiceRoll(result) {
@@ -251,293 +180,6 @@ async function saveDiceRoll(result) {
         }, { merge: true });
     } catch (error) {
         console.error('Error saving dice roll:', error);
-    }
-}
-
-// ===========================
-// Piece Movement & Gameplay Rules
-// ===========================
-
-// Safe zones on the main track (marked with ★)
-const SAFE_ZONES = [0, 8, 13, 21, 26, 34, 39, 47];
-
-// Home entry positions for each player
-const HOME_ENTRY = {
-    red: 0,
-    yellow: 26
-};
-
-function isSafeZone(pos) {
-    // Safe zones cannot be captured
-    return SAFE_ZONES.includes(pos);
-}
-
-function canMovePiece(piece, diceValue) {
-    // Rule 1: Token in base needs exactly 6 to exit
-    if (piece.pos === -1) {
-        return diceValue === 6;
-    }
-    
-    // Rule 2: Token on board can move if it won't overshoot home
-    if (piece.pos >= 0 && piece.pos < PATH_LENGTH) {
-        return true; // Can move on main track
-    }
-    
-    // Rule 3: Token in home column needs exact roll to reach home
-    if (piece.pos >= PATH_LENGTH && piece.pos < PATH_LENGTH + HOME_LENGTH) {
-        const newPos = piece.pos + diceValue;
-        return newPos <= PATH_LENGTH + HOME_LENGTH - 1;
-    }
-    
-    return false;
-}
-
-function getValidMoves(diceValue) {
-    // Get all pieces that can legally move with this dice value
-    const pieces = currentPlayer === 'red' ? redPieces : yellowPieces;
-    return pieces.filter(piece => canMovePiece(piece, diceValue));
-}
-
-function movePiece(piece, diceValue) {
-    if (!canMovePiece(piece, diceValue)) return false;
-
-    let newPos = piece.pos;
-
-    // Rule: Exit base with 6
-    if (piece.pos === -1 && diceValue === 6) {
-        newPos = currentPlayer === 'red' ? RED_START : YELLOW_START;
-    } 
-    // Rule: Move on main track
-    else if (piece.pos >= 0 && piece.pos < PATH_LENGTH) {
-        newPos = piece.pos + diceValue;
-        
-        // Rule: Enter home column when reaching end of main track
-        if (newPos >= PATH_LENGTH) {
-            newPos = PATH_LENGTH + (newPos - PATH_LENGTH);
-        }
-    }
-    // Rule: Move in home column with exact roll
-    else if (piece.pos >= PATH_LENGTH) {
-        newPos = piece.pos + diceValue;
-        
-        // Rule: Cannot overshoot home
-        if (newPos > PATH_LENGTH + HOME_LENGTH - 1) {
-            return false;
-        }
-    }
-
-    piece.pos = newPos;
-    return true;
-}
-
-function checkCapture(piece) {
-    // Rule: Capture opponent token if landing on same square (not safe zone)
-    if (piece.pos < 0 || piece.pos >= PATH_LENGTH) return; // Not on main path
-    
-    if (isSafeZone(piece.pos)) return; // Safe zones prevent capture
-
-    const opponentPieces = currentPlayer === 'red' ? yellowPieces : redPieces;
-    
-    for (let opp of opponentPieces) {
-        if (opp.pos === piece.pos) {
-            opp.pos = -1; // Send back to base
-            console.log('Captured opponent piece!');
-        }
-    }
-}
-
-function checkBlock(pos) {
-    // Rule: Check if position is blocked by opponent's double
-    const pieces = currentPlayer === 'red' ? yellowPieces : redPieces;
-    const count = pieces.filter(p => p.pos === pos).length;
-    return count >= 2; // Blocked if 2+ opponent pieces
-}
-
-function checkWinCondition() {
-    // Rule: Win by getting all 4 tokens to home
-    const pieces = currentPlayer === 'red' ? redPieces : yellowPieces;
-    const homePos = PATH_LENGTH + HOME_LENGTH - 1;
-    return pieces.every(p => p.pos === homePos);
-}
-
-function shouldGetBonusRoll(diceValue) {
-    // Rule: Get bonus roll if rolled 6
-    return diceValue === 6;
-}
-
-// ===========================
-// UI Updates
-// ===========================
-function updatePlayerInfo() {
-    if (gameMode === 'host') {
-        applyAvatarToElement(redAvatar, currentUserData);
-        redName.textContent = currentUserData?.displayName || 'You';
-        
-        if (opponentData) {
-            applyAvatarToElement(yellowAvatar, opponentData);
-            yellowName.textContent = opponentData.displayName || 'Opponent';
-        }
-    } else {
-        applyAvatarToElement(yellowAvatar, currentUserData);
-        yellowName.textContent = currentUserData?.displayName || 'You';
-        
-        if (opponentData) {
-            applyAvatarToElement(redAvatar, opponentData);
-            redName.textContent = opponentData.displayName || 'Opponent';
-        }
-    }
-}
-
-function updateTurnDisplay() {
-    const playerName = currentPlayer === 'red' ? 'Red' : 'Yellow';
-    turnDisplay.textContent = `${playerName}'s Turn`;
-    
-    redTurn.textContent = currentPlayer === 'red' ? 'Your Turn' : 'Waiting...';
-    yellowTurn.textContent = currentPlayer === 'yellow' ? 'Your Turn' : 'Waiting...';
-}
-
-function renderBoard() {
-    // Clear and render path grid
-    pathGrid.innerHTML = '';
-    for (let i = 0; i < PATH_LENGTH; i++) {
-        const cell = document.createElement('div');
-        cell.className = 'path-cell';
-        if (isSafeZone(i)) cell.classList.add('safe-zone');
-        if (i < RED_START + 13) cell.classList.add('red-path');
-        if (i >= YELLOW_START && i < YELLOW_START + 13) cell.classList.add('yellow-path');
-        pathGrid.appendChild(cell);
-    }
-
-    // Render home straights
-    renderHomeStraight(redHome, 'red');
-    renderHomeStraight(yellowHome, 'yellow');
-
-    // Render pieces
-    renderPieces();
-}
-
-function renderHomeStraight(container, color) {
-    container.innerHTML = '';
-    for (let i = 0; i < HOME_LENGTH; i++) {
-        const cell = document.createElement('div');
-        cell.className = 'home-cell';
-        container.appendChild(cell);
-    }
-}
-
-function renderPieces() {
-    // Render red pieces
-    redPieces.forEach(piece => {
-        const element = document.querySelector(`[data-token="${piece.id}"]`);
-        if (element) {
-            if (piece.pos === -1) {
-                element.classList.remove('on-board');
-            } else {
-                element.classList.add('on-board');
-                // Position on board (simplified)
-                const pos = piece.pos % PATH_LENGTH;
-                const x = (pos % 13) * 30;
-                const y = Math.floor(pos / 13) * 30;
-                element.style.left = x + 'px';
-                element.style.top = y + 'px';
-            }
-            
-            // Add click handler for piece selection
-            element.addEventListener('click', () => {
-                handlePieceClick(piece);
-            });
-        }
-    });
-
-    // Render yellow pieces
-    yellowPieces.forEach(piece => {
-        const element = document.querySelector(`[data-token="${piece.id}"]`);
-        if (element) {
-            if (piece.pos === -1) {
-                element.classList.remove('on-board');
-            } else {
-                element.classList.add('on-board');
-                const pos = piece.pos % PATH_LENGTH;
-                const x = (pos % 13) * 30;
-                const y = Math.floor(pos / 13) * 30;
-                element.style.left = x + 'px';
-                element.style.top = y + 'px';
-            }
-            
-            // Add click handler for piece selection
-            element.addEventListener('click', () => {
-                handlePieceClick(piece);
-            });
-        }
-    });
-}
-
-function handlePieceClick(piece) {
-    // Only allow moving own pieces
-    const isOwnPiece = (gameMode === 'host' && piece.id.startsWith('r')) ||
-                       (gameMode === 'join' && piece.id.startsWith('y'));
-    
-    if (!isOwnPiece) {
-        alert('You can only move your own pieces!');
-        return;
-    }
-    
-    // Check if piece can move with current dice roll
-    if (diceResult === 0) {
-        alert('Roll the dice first!');
-        return;
-    }
-    
-    if (!canMovePiece(piece, diceResult)) {
-        alert('This piece cannot move with a ' + diceResult);
-        return;
-    }
-    
-    // Move the piece
-    if (movePiece(piece, diceResult)) {
-        // Check for capture
-        checkCapture(piece);
-        
-        // Render updated board
-        renderPieces();
-        
-        // Check win condition
-        if (checkWinCondition()) {
-            gameActive = false;
-            gameOverMessage.textContent = `🏆 ${currentPlayer.toUpperCase()} Wins!`;
-            gameOverModal.classList.remove('hidden');
-            return;
-        }
-        
-        // Save game state
-        saveGameState();
-        
-        // Reset dice for next turn
-        diceResult = 0;
-        dice.textContent = '1';
-        
-        // Check if should pass turn
-        if (lastDiceRoll !== 6) {
-            // No bonus roll, pass turn
-            setTimeout(() => {
-                passTurn();
-            }, 1000);
-        } else {
-            // Got a 6, allow another roll
-            diceResult_el.textContent = 'Roll again!';
-        }
-    }
-}
-
-async function saveGameState() {
-    try {
-        await setDoc(doc(db, 'games', roomId), {
-            redPieces: redPieces,
-            yellowPieces: yellowPieces,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
-    } catch (error) {
-        console.error('Error saving game state:', error);
     }
 }
 
@@ -590,6 +232,37 @@ function listenForChatMessages() {
 }
 
 // ===========================
+// UI Updates
+// ===========================
+function updatePlayerInfo() {
+    if (gameMode === 'host') {
+        applyAvatarToElement(redAvatar, currentUserData);
+        redName.textContent = currentUserData?.displayName || 'You';
+        
+        if (opponentData) {
+            applyAvatarToElement(yellowAvatar, opponentData);
+            yellowName.textContent = opponentData.displayName || 'Opponent';
+        }
+    } else {
+        applyAvatarToElement(yellowAvatar, currentUserData);
+        yellowName.textContent = currentUserData?.displayName || 'You';
+        
+        if (opponentData) {
+            applyAvatarToElement(redAvatar, opponentData);
+            redName.textContent = opponentData.displayName || 'Opponent';
+        }
+    }
+}
+
+function updateTurnDisplay() {
+    const playerName = currentPlayer === 'red' ? 'Red' : 'Yellow';
+    turnDisplay.textContent = `${playerName}'s Turn`;
+    
+    redTurn.textContent = currentPlayer === 'red' ? 'Your Turn' : 'Waiting...';
+    yellowTurn.textContent = currentPlayer === 'yellow' ? 'Your Turn' : 'Waiting...';
+}
+
+// ===========================
 // Game Initialization
 // ===========================
 async function initializeGame() {
@@ -635,7 +308,6 @@ async function initializeGame() {
     }
 
     updatePlayerInfo();
-    renderBoard();
     listenForChatMessages();
     listenForGameStateChanges();
 }
@@ -714,7 +386,6 @@ async function resetGame() {
     winner = null;
     currentPlayer = 'red';
 
-    renderBoard();
     updateTurnDisplay();
 
     try {

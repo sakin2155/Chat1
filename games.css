@@ -214,6 +214,8 @@ body {
     justify-content: center;
     padding: 60px 20px;
     text-align: center;
+    flex: 1;
+    overflow-y: auto;
 }
 
 .waiting-screen.hidden {
@@ -251,11 +253,14 @@ body {
    Game Board
    =========================== */
 .game-board {
-    padding: 30px 20px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: 15px;
+    overflow-y: auto;
+    flex: 1;
+    max-width: 100%;
 }
 
 .game-board.hidden {
@@ -481,6 +486,8 @@ button {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    overflow: hidden;
+    max-height: 100vh;
 }
 
 /* ===========================
@@ -522,8 +529,11 @@ button {
    In-Game Chat
    =========================== */
 .game-chat {
-    width: 100%;
+    width: 280px;
+    min-width: 280px;
     max-width: 280px;
+    height: 100vh;
+    max-height: 100vh;
     background: #0d1117;
     border-left: 1px solid #30363d;
     display: flex;
@@ -660,8 +670,8 @@ button {
    =========================== */
 @media (max-width: 768px) {
     .game-container {
-        flex-direction: column;
-        height: auto;
+        flex-direction: row;
+        height: 100vh;
         min-height: 100vh;
     }
     
@@ -669,15 +679,19 @@ button {
         order: 1;
         flex: 1;
         min-height: 0;
+        overflow: hidden;
+        max-height: 100vh;
     }
     
     .game-chat {
         order: 2;
-        width: 100%;
-        max-width: none;
-        border-left: none;
-        border-top: 1px solid #30363d;
-        max-height: 250px;
+        width: 280px;
+        min-width: 280px;
+        max-width: 280px;
+        height: 100vh;
+        max-height: 100vh;
+        border-left: 1px solid #30363d;
+        border-top: none;
     }
     
     .game-header h1 {
@@ -706,6 +720,28 @@ button {
 }
 
 @media (max-width: 480px) {
+    .game-container {
+        flex-direction: row;
+        height: 100vh;
+        min-height: 100vh;
+    }
+    
+    .game-main {
+        flex: 1;
+        overflow: hidden;
+        max-height: 100vh;
+        min-width: 0;
+    }
+    
+    .game-chat {
+        width: 120px;
+        min-width: 120px;
+        max-width: 120px;
+        height: 100vh;
+        max-height: 100vh;
+        border-left: 1px solid #30363d;
+    }
+    
     .game-header {
         padding: 12px 15px;
     }
@@ -769,29 +805,40 @@ button {
         font-size: 12px;
     }
     
+    .chat-header {
+        padding: 8px 6px;
+        font-size: 10px;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+    }
+    
     .chat-messages {
-        padding: 10px;
-        gap: 6px;
+        padding: 6px;
+        gap: 4px;
     }
     
     .chat-message {
-        padding: 6px 8px;
-        font-size: 11px;
+        padding: 4px 6px;
+        font-size: 9px;
+        max-width: 100%;
     }
     
     .chat-input-container {
-        padding: 8px;
-        gap: 5px;
+        padding: 6px;
+        gap: 3px;
+        flex-direction: column;
     }
     
     .chat-input {
-        padding: 5px 8px;
-        font-size: 11px;
+        padding: 4px 6px;
+        font-size: 10px;
+        width: 100%;
     }
     
     .send-btn {
-        padding: 5px 10px;
-        font-size: 11px;
+        padding: 4px 6px;
+        font-size: 9px;
+        width: 100%;
     }
 }
 

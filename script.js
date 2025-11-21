@@ -87,6 +87,7 @@ let replyingToMessage = null;
 let editingMessageId = null;
 let editingOriginalText = null;
 let presenceInterval = null;
+let statusUpdateInterval = null;
 let currentUserData = null;
 let unsubscribeCurrentUser = null;
 let profileAvatarTempUrl = null;
@@ -910,6 +911,7 @@ function createUserItem(userData) {
         <div class="user-avatar-container">
             <div class="user-avatar">${getInitials(userData.displayName || userData.email || '')}</div>
             ${displayStatus === 'online' ? '<div class="online-indicator"></div>' : ''}
+            <div class="unread-badge hidden">0</div>
         </div>
         <div class="user-info">
             <div class="user-name">${displayName}</div>
@@ -925,6 +927,13 @@ function createUserItem(userData) {
 
     // Load and listen to latest message preview
     loadLatestMessagePreview(userData.uid, div);
+
+    // Load and listen to unread message count (with error handling)
+    try {
+        loadUnreadMessageCount(userData.uid, div);
+    } catch (error) {
+        console.warn('Could not load unread count:', error);
+    }
 
     return div;
 }
@@ -950,7 +959,7 @@ function updateUserStatus(userData) {
 
     // Update chat header if this is the current chat user
     if (currentChatUser && currentChatUser.uid === userData.uid) {
-        document.getElementById('chat-user-status').textContent = displayStatus;
+        document.getElementById('chat-user-status').textContent = getStatusDisplayText(userData);
         applyAvatarToElement(document.getElementById('chat-user-avatar'), userData.photoURL, userData.displayName || userData.email);
     }
 }
@@ -991,7 +1000,13 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
             previewEl.classList.remove('unread');
         } else {
             const latestMessage = snapshot.docs[0].data();
-            const previewText = getMessagePreviewText(latestMessage);
+            let previewText = getMessagePreviewText(latestMessage);
+            
+            // Add "You: " prefix if the message was sent by the current user
+            if (latestMessage.senderId === currentUser.uid) {
+                previewText = `You: ${previewText}`;
+            }
+            
             previewEl.textContent = previewText;
 
             // Add unread indicator if message is not seen and not from current user
@@ -1010,6 +1025,41 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
     userItemEl._unsubscribes.push(unsubscribe);
 }
 
+function loadUnreadMessageCount(otherUserId, userItemEl) {
+    try {
+        const chatId = getChatId(currentUser.uid, otherUserId);
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const q = query(messagesRef, where('seen', '==', false));
+
+        // Listen for real-time updates
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const badgeEl = userItemEl.querySelector('.unread-badge');
+            if (!badgeEl) return;
+
+            // Filter messages from the other user (not from current user)
+            const unreadCount = snapshot.docs.filter(doc => doc.data().senderId !== currentUser.uid).length;
+            
+            if (unreadCount > 0) {
+                badgeEl.textContent = unreadCount;
+                badgeEl.classList.remove('hidden');
+            } else {
+                badgeEl.classList.add('hidden');
+            }
+        }, (error) => {
+            // Silently handle errors - don't break message loading
+            console.warn('Warning loading unread message count:', error.code);
+        });
+
+        // Store unsubscribe function for cleanup if needed
+        if (!userItemEl._unsubscribes) {
+            userItemEl._unsubscribes = [];
+        }
+        userItemEl._unsubscribes.push(unsubscribe);
+    } catch (error) {
+        console.warn('Error setting up unread message listener:', error);
+    }
+}
+
 // ===========================
 // Chat Window
 // ===========================
@@ -1021,7 +1071,7 @@ async function openChat(userData) {
     const nickname = userNicknames.get(userData.uid);
     const displayName = nickname || userData.displayName;
     document.getElementById('chat-user-name').textContent = displayName;
-    document.getElementById('chat-user-status').textContent = getDisplayStatus(userData);
+    document.getElementById('chat-user-status').textContent = getStatusDisplayText(userData);
     applyAvatarToElement(document.getElementById('chat-user-avatar'), userData.photoURL, userData.displayName || userData.email);
 
     // Mobile: show chat window
@@ -1058,10 +1108,14 @@ async function openChat(userData) {
 
     // Load and apply theme for this chat
     loadThemeForChat();
+
+    // Start updating status text every 10 seconds to keep relative time current
+    startStatusUpdateInterval();
 }
 
 backToUsersBtn.addEventListener('click', () => {
     chatWindowContainer.classList.remove('active');
+    stopStatusUpdateInterval();
 });
 
 // ===========================
@@ -1087,34 +1141,46 @@ function loadMessages() {
         let hasNewMessages = false;
         let messageCount = 0;
 
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-                const messageData = { id: change.doc.id, ...change.doc.data() };
-                appendMessage(messageData);
-                hasNewMessages = true;
-                messageCount++;
-            } else if (change.type === 'modified') {
-                updateMessage(change.doc.id, change.doc.data());
-            } else if (change.type === 'removed') {
-                removeMessage(change.doc.id);
-            }
-        });
-
-        // Auto-scroll logic:
-        // 1. Always scroll to bottom on first load (initial chat open)
-        // 2. Scroll to bottom if user was already at bottom and new messages arrive
-        if (hasNewMessages) {
-            if (isFirstMessageLoad) {
-                // First load: always scroll to bottom to show latest messages
-                scrollToBottom(false);
-                isFirstMessageLoad = false;
-            } else if (wasAtBottom) {
-                // Subsequent loads: only scroll if user was at bottom
-                scrollToBottom(false);
-            }
-
-            // Mark new messages as seen (debounced)
+        // On first load, render all messages at once to maintain order
+        if (isFirstMessageLoad) {
+            const allMessages = [];
+            snapshot.docs.forEach((doc) => {
+                allMessages.push({ id: doc.id, ...doc.data() });
+            });
+            
+            // Render all messages in order
+            allMessages.forEach((messageData) => {
+                const messageEl = createMessageElement(messageData);
+                messagesContainer.appendChild(messageEl);
+            });
+            
+            updateMessageStatusVisibility();
+            scrollToBottom(false);
+            isFirstMessageLoad = false;
             markMessagesAsSeen();
+        } else {
+            // On subsequent updates, only process new changes
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const messageData = { id: change.doc.id, ...change.doc.data() };
+                    appendMessage(messageData);
+                    hasNewMessages = true;
+                    messageCount++;
+                } else if (change.type === 'modified') {
+                    updateMessage(change.doc.id, change.doc.data());
+                } else if (change.type === 'removed') {
+                    removeMessage(change.doc.id);
+                }
+            });
+
+            // Auto-scroll logic for new messages
+            if (hasNewMessages) {
+                if (wasAtBottom) {
+                    scrollToBottom(false);
+                }
+                // Mark new messages as seen (debounced)
+                markMessagesAsSeen();
+            }
         }
     });
 
@@ -1390,27 +1456,8 @@ function appendMessage(messageData) {
     const messageEl = createMessageElement(messageData);
     // Use requestAnimationFrame to prevent layout thrashing
     requestAnimationFrame(() => {
-        // Insert message in correct chronological order based on timestamp
-        const existingMessages = messagesContainer.querySelectorAll('.message');
-        let inserted = false;
-        
-        for (let i = 0; i < existingMessages.length; i++) {
-            const existingMsg = existingMessages[i];
-            const existingTimestamp = parseInt(existingMsg.dataset.timestamp || '0');
-            const newTimestamp = messageData.timestamp?.seconds ? messageData.timestamp.seconds * 1000 : 0;
-            
-            if (newTimestamp < existingTimestamp) {
-                messagesContainer.insertBefore(messageEl, existingMsg);
-                inserted = true;
-                break;
-            }
-        }
-        
-        // If not inserted yet, append to end
-        if (!inserted) {
-            messagesContainer.appendChild(messageEl);
-        }
-        
+        // Simply append to end - Firestore query already orders by timestamp
+        messagesContainer.appendChild(messageEl);
         updateMessageStatusVisibility();
         // Auto-scroll to bottom when new message is added
         scrollToBottom(true);
@@ -1527,6 +1574,59 @@ function getDisplayStatus(userData) {
     return userData.status === 'online' ? 'online' : 'offline';
 }
 
+function getStatusDisplayText(userData) {
+    if (!userData) return 'offline';
+    
+    const lastActive = userData.lastActive?.toDate
+        ? userData.lastActive.toDate()
+        : userData.lastActive
+            ? new Date(userData.lastActive)
+            : null;
+    
+    // Check if user is online
+    if (lastActive) {
+        const isRecentlyActive = (Date.now() - lastActive.getTime()) < PRESENCE_TIMEOUT;
+        if (isRecentlyActive) {
+            return 'Online';
+        }
+    } else if (userData.status === 'online') {
+        return 'Online';
+    }
+    
+    // User is offline - show relative time
+    if (lastActive) {
+        const now = Date.now();
+        const diff = now - lastActive.getTime();
+        
+        // Less than 1 minute
+        if (diff < 60000) {
+            return 'Active just now';
+        }
+        // Less than 1 hour
+        if (diff < 3600000) {
+            const minutes = Math.floor(diff / 60000);
+            return `Active ${minutes}m ago`;
+        }
+        // Less than 24 hours
+        if (diff < 86400000) {
+            const hours = Math.floor(diff / 3600000);
+            return `Active ${hours}h ago`;
+        }
+        // Less than 7 days
+        if (diff < 604800000) {
+            const days = Math.floor(diff / 86400000);
+            if (days === 1) {
+                return 'Active yesterday';
+            }
+            return `Active ${days}d ago`;
+        }
+        // More than 7 days - show date
+        return `Active ${lastActive.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    }
+    
+    return 'offline';
+}
+
 function renderCurrentUserProfile() {
     if (!currentUserNameEl) return;
 
@@ -1584,6 +1684,26 @@ function stopPresenceTracking() {
     if (presenceInterval) {
         clearInterval(presenceInterval);
         presenceInterval = null;
+    }
+}
+
+function startStatusUpdateInterval() {
+    stopStatusUpdateInterval();
+    // Update status every 60 seconds to keep relative time current
+    statusUpdateInterval = setInterval(() => {
+        if (currentChatUser) {
+            const statusEl = document.getElementById('chat-user-status');
+            if (statusEl) {
+                statusEl.textContent = getStatusDisplayText(currentChatUser);
+            }
+        }
+    }, 60000);
+}
+
+function stopStatusUpdateInterval() {
+    if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+        statusUpdateInterval = null;
     }
 }
 

@@ -911,7 +911,6 @@ function createUserItem(userData) {
         <div class="user-avatar-container">
             <div class="user-avatar">${getInitials(userData.displayName || userData.email || '')}</div>
             ${displayStatus === 'online' ? '<div class="online-indicator"></div>' : ''}
-            <div class="unread-badge hidden">0</div>
         </div>
         <div class="user-info">
             <div class="user-name">${displayName}</div>
@@ -927,13 +926,6 @@ function createUserItem(userData) {
 
     // Load and listen to latest message preview
     loadLatestMessagePreview(userData.uid, div);
-
-    // Load and listen to unread message count (with error handling)
-    try {
-        loadUnreadMessageCount(userData.uid, div);
-    } catch (error) {
-        console.warn('Could not load unread count:', error);
-    }
 
     return div;
 }
@@ -1025,41 +1017,6 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
     userItemEl._unsubscribes.push(unsubscribe);
 }
 
-function loadUnreadMessageCount(otherUserId, userItemEl) {
-    try {
-        const chatId = getChatId(currentUser.uid, otherUserId);
-        const messagesRef = collection(db, 'chats', chatId, 'messages');
-        const q = query(messagesRef, where('seen', '==', false));
-
-        // Listen for real-time updates
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const badgeEl = userItemEl.querySelector('.unread-badge');
-            if (!badgeEl) return;
-
-            // Filter messages from the other user (not from current user)
-            const unreadCount = snapshot.docs.filter(doc => doc.data().senderId !== currentUser.uid).length;
-            
-            if (unreadCount > 0) {
-                badgeEl.textContent = unreadCount;
-                badgeEl.classList.remove('hidden');
-            } else {
-                badgeEl.classList.add('hidden');
-            }
-        }, (error) => {
-            // Silently handle errors - don't break message loading
-            console.warn('Warning loading unread message count:', error.code);
-        });
-
-        // Store unsubscribe function for cleanup if needed
-        if (!userItemEl._unsubscribes) {
-            userItemEl._unsubscribes = [];
-        }
-        userItemEl._unsubscribes.push(unsubscribe);
-    } catch (error) {
-        console.warn('Error setting up unread message listener:', error);
-    }
-}
-
 // ===========================
 // Chat Window
 // ===========================
@@ -1141,46 +1098,34 @@ function loadMessages() {
         let hasNewMessages = false;
         let messageCount = 0;
 
-        // On first load, render all messages at once to maintain order
-        if (isFirstMessageLoad) {
-            const allMessages = [];
-            snapshot.docs.forEach((doc) => {
-                allMessages.push({ id: doc.id, ...doc.data() });
-            });
-            
-            // Render all messages in order
-            allMessages.forEach((messageData) => {
-                const messageEl = createMessageElement(messageData);
-                messagesContainer.appendChild(messageEl);
-            });
-            
-            updateMessageStatusVisibility();
-            scrollToBottom(false);
-            isFirstMessageLoad = false;
-            markMessagesAsSeen();
-        } else {
-            // On subsequent updates, only process new changes
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'added') {
-                    const messageData = { id: change.doc.id, ...change.doc.data() };
-                    appendMessage(messageData);
-                    hasNewMessages = true;
-                    messageCount++;
-                } else if (change.type === 'modified') {
-                    updateMessage(change.doc.id, change.doc.data());
-                } else if (change.type === 'removed') {
-                    removeMessage(change.doc.id);
-                }
-            });
-
-            // Auto-scroll logic for new messages
-            if (hasNewMessages) {
-                if (wasAtBottom) {
-                    scrollToBottom(false);
-                }
-                // Mark new messages as seen (debounced)
-                markMessagesAsSeen();
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+                const messageData = { id: change.doc.id, ...change.doc.data() };
+                appendMessage(messageData);
+                hasNewMessages = true;
+                messageCount++;
+            } else if (change.type === 'modified') {
+                updateMessage(change.doc.id, change.doc.data());
+            } else if (change.type === 'removed') {
+                removeMessage(change.doc.id);
             }
+        });
+
+        // Auto-scroll logic:
+        // 1. Always scroll to bottom on first load (initial chat open)
+        // 2. Scroll to bottom if user was already at bottom and new messages arrive
+        if (hasNewMessages) {
+            if (isFirstMessageLoad) {
+                // First load: always scroll to bottom to show latest messages
+                scrollToBottom(false);
+                isFirstMessageLoad = false;
+            } else if (wasAtBottom) {
+                // Subsequent loads: only scroll if user was at bottom
+                scrollToBottom(false);
+            }
+
+            // Mark new messages as seen (debounced)
+            markMessagesAsSeen();
         }
     });
 
@@ -1456,8 +1401,27 @@ function appendMessage(messageData) {
     const messageEl = createMessageElement(messageData);
     // Use requestAnimationFrame to prevent layout thrashing
     requestAnimationFrame(() => {
-        // Simply append to end - Firestore query already orders by timestamp
-        messagesContainer.appendChild(messageEl);
+        // Insert message in correct chronological order based on timestamp
+        const existingMessages = messagesContainer.querySelectorAll('.message');
+        let inserted = false;
+        
+        for (let i = 0; i < existingMessages.length; i++) {
+            const existingMsg = existingMessages[i];
+            const existingTimestamp = parseInt(existingMsg.dataset.timestamp || '0');
+            const newTimestamp = messageData.timestamp?.seconds ? messageData.timestamp.seconds * 1000 : 0;
+            
+            if (newTimestamp < existingTimestamp) {
+                messagesContainer.insertBefore(messageEl, existingMsg);
+                inserted = true;
+                break;
+            }
+        }
+        
+        // If not inserted yet, append to end
+        if (!inserted) {
+            messagesContainer.appendChild(messageEl);
+        }
+        
         updateMessageStatusVisibility();
         // Auto-scroll to bottom when new message is added
         scrollToBottom(true);

@@ -11,7 +11,13 @@ import {
     doc,
     getDoc,
     setDoc,
-    onSnapshot
+    onSnapshot,
+    updateDoc,
+    collection,
+    addDoc,
+    query,
+    orderBy,
+    limit
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // ===========================
@@ -162,7 +168,7 @@ function isBoardFull(board) {
     return board.every(cell => cell !== '');
 }
 
-function makeMove(index) {
+async function makeMove(index) {
     if (!gameActive || gameOver) return false;
     if (gameState[index] !== '') return false;
     
@@ -182,7 +188,6 @@ function makeMove(index) {
         gameOver = true;
         gameActive = false;
         showGameOverModal(winner);
-        return true;
     }
 
     // Check for draw
@@ -190,22 +195,28 @@ function makeMove(index) {
         gameOver = true;
         gameActive = false;
         showGameOverModal('draw');
-        return true;
     }
 
     // Switch turn
     currentTurn = currentTurn === 'X' ? 'O' : 'X';
     updateTurnIndicator();
 
-    // Emit move to opponent via socket
-    if (socket) {
-        socket.emit('make_move', {
-            roomId: roomId,
+    // Save move to Firestore for real-time sync
+    try {
+        await addDoc(collection(db, 'games', roomId, 'moves'), {
             index: index,
             symbol: playerSymbol,
+            playerId: currentUser.uid,
+            playerName: currentUserData?.displayName || 'Player',
+            timestamp: new Date(),
             gameState: gameState,
-            currentTurn: currentTurn
+            currentTurn: currentTurn,
+            gameOver: gameOver,
+            winner: winner || null
         });
+        console.log('Move saved to Firestore');
+    } catch (error) {
+        console.error('Error saving move:', error);
     }
 
     return true;
@@ -371,6 +382,13 @@ async function initializeGame() {
     }
 
     updatePlayerInfo();
+    
+    // Load existing game state if resuming
+    await loadGameState();
+    
+    // Set up real-time move synchronization
+    listenForMoves();
+    
     initializeSocket();
 }
 
@@ -425,6 +443,104 @@ function listenForHostPresence() {
     }, (error) => {
         console.error('Error listening for host:', error);
     });
+}
+
+// ===========================
+// Real-time Move Synchronization
+// ===========================
+function listenForMoves() {
+    // Listen for all moves in the game
+    console.log('Setting up listener for moves...');
+    const movesQuery = query(
+        collection(db, 'games', roomId, 'moves'),
+        orderBy('timestamp', 'asc')
+    );
+    
+    const unsubscribe = onSnapshot(movesQuery, (querySnap) => {
+        console.log('Moves listener triggered, count:', querySnap.docs.length);
+        
+        // Rebuild game state from moves
+        gameState = ['', '', '', '', '', '', '', '', ''];
+        currentTurn = 'X';
+        gameOver = false;
+        let lastWinner = null;
+        
+        querySnap.docs.forEach((doc) => {
+            const moveData = doc.data();
+            console.log('Processing move:', moveData);
+            
+            // Apply move to board
+            gameState[moveData.index] = moveData.symbol;
+            
+            // Update game state
+            currentTurn = moveData.currentTurn;
+            gameOver = moveData.gameOver;
+            lastWinner = moveData.winner;
+        });
+        
+        // Update UI with current game state
+        updateBoardUI();
+        updateTurnIndicator();
+        
+        // If game is over, show modal
+        if (gameOver && lastWinner) {
+            showGameOverModal(lastWinner);
+        }
+        
+        console.log('Game state updated from Firestore');
+    }, (error) => {
+        console.error('Error listening for moves:', error);
+    });
+}
+
+// ===========================
+// Game State Persistence
+// ===========================
+async function loadGameState() {
+    // Load existing game state from Firestore
+    try {
+        console.log('Loading game state from Firestore...');
+        const gameDoc = await getDoc(doc(db, 'games', roomId));
+        
+        if (gameDoc.exists()) {
+            const data = gameDoc.data();
+            console.log('Game state loaded:', data);
+            
+            gameState = data.gameState || ['', '', '', '', '', '', '', '', ''];
+            currentTurn = data.currentTurn || 'X';
+            gameOver = data.gameOver || false;
+            gameActive = !gameOver;
+            
+            updateBoardUI();
+            updateTurnIndicator();
+            
+            if (gameOver) {
+                hideWaitingScreen();
+                showGameOverModal(data.winner || 'draw');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading game state:', error);
+    }
+}
+
+async function saveGameState() {
+    // Save game state to Firestore
+    try {
+        await setDoc(doc(db, 'games', roomId), {
+            gameState: gameState,
+            currentTurn: currentTurn,
+            gameOver: gameOver,
+            winner: checkWinner(gameState),
+            hostId: gameMode === 'host' ? currentUser.uid : null,
+            guestId: gameMode === 'join' ? currentUser.uid : null,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }, { merge: true });
+        console.log('Game state saved to Firestore');
+    } catch (error) {
+        console.error('Error saving game state:', error);
+    }
 }
 
 // ===========================

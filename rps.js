@@ -42,6 +42,7 @@ const db = getFirestore(app);
 // ===========================
 let currentUser = null;
 let currentUserData = null;
+let currentChatId = null;
 let roomId = null;
 let gameMode = null; // 'host' or 'join'
 let playerNumber = null; // 1 or 2
@@ -81,6 +82,9 @@ const player1Score = document.getElementById('player-1-score');
 const player2Avatar = document.getElementById('player-2-avatar');
 const player2Name = document.getElementById('player-2-name');
 const player2Score = document.getElementById('player-2-score');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const sendChatBtn = document.getElementById('send-chat-btn');
 
 // ===========================
 // Utility Functions
@@ -121,6 +125,34 @@ function applyAvatarToElement(element, userData) {
     }
 }
 
+async function applyTheme() {
+    try {
+        // Get theme from chat metadata if available
+        const themeDoc = await getDoc(doc(db, 'chats', currentChatId, 'metadata', 'theme'));
+        if (themeDoc.exists()) {
+            const theme = themeDoc.data();
+            const root = document.documentElement;
+            
+            if (theme.sentBubbleColor) {
+                root.style.setProperty('--message-own-bg', theme.sentBubbleColor);
+            }
+            if (theme.receivedBubbleColor) {
+                root.style.setProperty('--message-opponent-bg', theme.receivedBubbleColor);
+            }
+            if (theme.primaryColor) {
+                root.style.setProperty('--primary-color', theme.primaryColor);
+            }
+            if (theme.secondaryColor) {
+                root.style.setProperty('--secondary-color', theme.secondaryColor);
+            }
+            
+            console.log('Theme applied:', theme);
+        }
+    } catch (error) {
+        console.log('No theme found or error applying theme:', error);
+    }
+}
+
 // ===========================
 // URL Parameter Parsing
 // ===========================
@@ -128,7 +160,8 @@ function getUrlParams() {
     const params = new URLSearchParams(window.location.search);
     return {
         roomId: params.get('roomId'),
-        mode: params.get('mode')
+        mode: params.get('mode'),
+        chatId: params.get('chatId')
     };
 }
 
@@ -224,12 +257,18 @@ async function initializeGame() {
     const params = getUrlParams();
     roomId = params.roomId;
     gameMode = params.mode;
+    currentChatId = params.chatId;
 
-    console.log('Initializing RPS game with roomId:', roomId, 'mode:', gameMode);
+    console.log('Initializing RPS game with roomId:', roomId, 'mode:', gameMode, 'chatId:', currentChatId);
 
     if (!roomId || !gameMode) {
         console.error('Invalid game parameters');
         return;
+    }
+    
+    // Apply theme if chatId is available
+    if (currentChatId) {
+        await applyTheme();
     }
 
     if (gameMode === 'host') {
@@ -280,6 +319,7 @@ async function initializeGame() {
 
     updatePlayerInfo();
     listenForRoundUpdates();
+    listenForChatMessages();
 }
 
 // ===========================
@@ -414,17 +454,80 @@ function displayResult(player1Choice, player2Choice, result) {
 async function playAgain() {
     console.log('Starting new round...');
     
-    // Clear current round data
+    // Clear current round data for both players
     try {
         await setDoc(doc(db, 'rps_games', roomId, 'rounds', 'current'), {
             player1Choice: null,
-            player2Choice: null
+            player2Choice: null,
+            player1SubmittedAt: null,
+            player2SubmittedAt: null
         }, { merge: true });
+        console.log('Round cleared, ready for next game');
     } catch (error) {
         console.error('Error clearing round:', error);
     }
     
     resetRound();
+}
+
+// ===========================
+// Chat Functions
+// ===========================
+let displayedChatMessages = new Set();
+
+function displayChatMessage(data, docId, isOwn = false) {
+    // Prevent duplicate messages
+    if (displayedChatMessages.has(docId)) return;
+    displayedChatMessages.add(docId);
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = `chat-message ${isOwn ? 'own' : 'opponent'}`;
+    messageEl.textContent = data.message;
+    messageEl.dataset.messageId = docId;
+    
+    if (chatMessages) {
+        chatMessages.appendChild(messageEl);
+        // Auto-scroll to bottom
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 0);
+    }
+}
+
+async function sendChatMessage(text) {
+    if (!text.trim()) return;
+    
+    try {
+        await addDoc(collection(db, 'rps_games', roomId, 'chat'), {
+            senderId: currentUser.uid,
+            senderName: currentUserData?.displayName || 'Player',
+            message: text.trim(),
+            timestamp: serverTimestamp()
+        });
+        console.log('Chat message sent');
+    } catch (error) {
+        console.error('Error sending chat message:', error);
+    }
+}
+
+function listenForChatMessages() {
+    console.log('Setting up listener for chat messages...');
+    const chatQuery = query(
+        collection(db, 'rps_games', roomId, 'chat'),
+        orderBy('timestamp', 'asc')
+    );
+    
+    const unsubscribe = onSnapshot(chatQuery, (querySnap) => {
+        console.log('Chat listener triggered, count:', querySnap.docs.length);
+        
+        querySnap.docs.forEach((doc) => {
+            const data = doc.data();
+            const isOwn = data.senderId === currentUser.uid;
+            displayChatMessage(data, doc.id, isOwn);
+        });
+    }, (error) => {
+        console.error('Error listening for chat messages:', error);
+    });
 }
 
 // ===========================
@@ -441,6 +544,27 @@ playAgainBtn.addEventListener('click', playAgain);
 
 backToChatBtn.addEventListener('click', () => {
     window.location.href = 'index.html';
+});
+
+// Chat event listeners
+sendChatBtn.addEventListener('click', async () => {
+    const text = chatInput.value;
+    if (text.trim()) {
+        await sendChatMessage(text);
+        chatInput.value = '';
+        chatInput.focus();
+    }
+});
+
+chatInput.addEventListener('keypress', async (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const text = chatInput.value;
+        if (text.trim()) {
+            await sendChatMessage(text);
+            chatInput.value = '';
+        }
+    }
 });
 
 // ===========================

@@ -70,6 +70,10 @@ service cloud.firestore {
       match /rounds/{roundId} {
         allow read, write: if request.auth != null;
       }
+      
+      match /chat/{messageId} {
+        allow read, write: if request.auth != null;
+      }
     }
   }
 }

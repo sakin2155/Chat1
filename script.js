@@ -1444,7 +1444,7 @@ function createMessageElement(messageData) {
                     if (roomId) {
                         // Determine which game file to use
                         const gameFile = gameType === 'rps' ? 'rps.html' : 'games.html';
-                        window.location.href = `${gameFile}?roomId=${roomId}&mode=join`;
+                        window.location.href = `${gameFile}?roomId=${roomId}&mode=join&chatId=${currentChatId}`;
                     }
                 });
             }
@@ -3157,7 +3157,7 @@ async function handleGameInvite(gameType = 'tictactoe') {
 
         // Redirect host to game page
         setTimeout(() => {
-            window.location.href = `${gameFile}?roomId=${roomId}&mode=host`;
+            window.location.href = `${gameFile}?roomId=${roomId}&mode=host&chatId=${currentChatId}`;
         }, 500);
 
         hideLoading();

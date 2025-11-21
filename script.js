@@ -115,6 +115,17 @@ let streakData = new Map(); // Store streaks: chatId -> { count, lastMessageDate
 let streakCheckInterval = null;
 
 // ===========================
+// Auto-scroll Helper
+// ===========================
+function scrollMessagesToBottom() {
+    if (!messagesContainer) return;
+    // Use requestAnimationFrame for smooth scrolling
+    requestAnimationFrame(() => {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    });
+}
+
+// ===========================
 // DOM Elements
 // ===========================
 const globalLoading = document.getElementById('global-loading');
@@ -1316,15 +1327,21 @@ function createMessageElement(messageData) {
 
 function scrollToBottom(smooth = false) {
     if (!messagesContainer) return;
+    
+    // Use multiple requestAnimationFrames to ensure DOM is fully updated
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-            if (smooth) {
-                messagesContainer.scrollTo({
-                    top: messagesContainer.scrollHeight,
-                    behavior: 'smooth'
-                });
-            } else {
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            try {
+                if (smooth) {
+                    messagesContainer.scrollTo({
+                        top: messagesContainer.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                } else {
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            } catch (error) {
+                console.error('Error scrolling to bottom:', error);
             }
         });
     });
@@ -1336,6 +1353,8 @@ function appendMessage(messageData) {
     requestAnimationFrame(() => {
         messagesContainer.appendChild(messageEl);
         updateMessageStatusVisibility();
+        // Auto-scroll to bottom when new message is added
+        scrollToBottom(true);
     });
 }
 
@@ -2428,7 +2447,9 @@ async function applyTheme() {
             receivedBubbleColor: receivedBubbleColorInput.value,
             bgColor: bgColorInput.value,
             bgImage: chatThemes.get(currentChatId)?.bgImage || null,
-            bgImageOverlay: true
+            bgImageOverlay: true,
+            updatedBy: currentUser.uid,
+            updatedAt: serverTimestamp()
         };
 
         // Save to local map
@@ -2437,6 +2458,10 @@ async function applyTheme() {
         // Save to localStorage
         const themesData = JSON.stringify(Array.from(chatThemes.entries()));
         localStorage.setItem(`themes_${currentUser.uid}`, themesData);
+
+        // Save to Firestore so other user can see the theme
+        const themeRef = doc(db, 'chats', currentChatId, 'metadata', 'theme');
+        await setDoc(themeRef, theme, { merge: true });
 
         // Apply theme to chat
         applyThemeToChat(theme);
@@ -2448,7 +2473,7 @@ async function applyTheme() {
     }
 }
 
-function resetTheme() {
+async function resetTheme() {
     const defaultTheme = getDefaultTheme();
     sentBubbleColorInput.value = defaultTheme.sentBubbleColor;
     receivedBubbleColorInput.value = defaultTheme.receivedBubbleColor;
@@ -2459,6 +2484,14 @@ function resetTheme() {
     chatThemes.delete(currentChatId);
     const themesData = JSON.stringify(Array.from(chatThemes.entries()));
     localStorage.setItem(`themes_${currentUser.uid}`, themesData);
+
+    // Delete theme from Firestore so other user also sees default
+    try {
+        const themeRef = doc(db, 'chats', currentChatId, 'metadata', 'theme');
+        await deleteDoc(themeRef);
+    } catch (error) {
+        console.error('Error deleting theme from Firestore:', error);
+    }
 
     // Apply default theme
     applyThemeToChat(defaultTheme);
@@ -2499,11 +2532,48 @@ function applyThemeToChat(theme) {
     });
 }
 
+let unsubscribeTheme = null;
+
 function loadThemeForChat() {
     if (!currentChatId) return;
 
-    const theme = chatThemes.get(currentChatId) || getDefaultTheme();
-    applyThemeToChat(theme);
+    // First, apply locally cached theme
+    const cachedTheme = chatThemes.get(currentChatId);
+    if (cachedTheme) {
+        applyThemeToChat(cachedTheme);
+    } else {
+        applyThemeToChat(getDefaultTheme());
+    }
+
+    // Listen for real-time theme changes from Firestore
+    if (unsubscribeTheme) {
+        unsubscribeTheme();
+    }
+
+    try {
+        const themeRef = doc(db, 'chats', currentChatId, 'metadata', 'theme');
+        unsubscribeTheme = onSnapshot(themeRef, (doc) => {
+            if (doc.exists()) {
+                const themeData = doc.data();
+                console.log('Theme updated from Firestore:', themeData);
+                
+                // Update local cache
+                chatThemes.set(currentChatId, themeData);
+                
+                // Apply the theme immediately
+                applyThemeToChat(themeData);
+            } else {
+                // No theme set, use default
+                const defaultTheme = getDefaultTheme();
+                chatThemes.delete(currentChatId);
+                applyThemeToChat(defaultTheme);
+            }
+        }, (error) => {
+            console.error('Error listening to theme changes:', error);
+        });
+    } catch (error) {
+        console.error('Error setting up theme listener:', error);
+    }
 }
 
 function escapeHtml(text) {
@@ -2625,6 +2695,8 @@ async function sendMediaMessage(mediaUrl, messageType) {
         cancelReply();
     }
     updateTypingStatus(false);
+    // Auto-scroll to bottom when media message is sent
+    scrollToBottom(true);
 }
 
 // ===========================
@@ -2641,6 +2713,7 @@ async function loadStreakData(chatId) {
     try {
         const streakRef = doc(db, 'chats', chatId, 'metadata', 'streak');
         const streakDoc = await getDoc(streakRef);
+        
         if (streakDoc.exists()) {
             const data = streakDoc.data();
             streakData.set(chatId, {
@@ -2649,13 +2722,19 @@ async function loadStreakData(chatId) {
                 lastMessageFrom: data.lastMessageFrom,
                 lastBothMessagedDate: data.lastBothMessagedDate
             });
+            console.log('Loaded streak for', chatId, ':', data);
         } else {
-            streakData.set(chatId, {
+            // Initialize streak document if it doesn't exist
+            const initialStreak = {
                 count: 0,
                 lastMessageDate: null,
                 lastMessageFrom: null,
-                lastBothMessagedDate: null
-            });
+                lastBothMessagedDate: null,
+                createdAt: serverTimestamp()
+            };
+            await setDoc(streakRef, initialStreak, { merge: true });
+            streakData.set(chatId, initialStreak);
+            console.log('Initialized new streak for', chatId);
         }
     } catch (error) {
         console.error('Error loading streak data:', error);
@@ -2675,7 +2754,9 @@ async function updateStreakOnMessage(chatId, senderId) {
         const streakRef = doc(db, 'chats', chatId, 'metadata', 'streak');
         const today = new Date().toDateString();
         
-        let currentStreak = streakData.get(chatId) || {
+        // Get current streak from Firestore (fresh data)
+        const streakDoc = await getDoc(streakRef);
+        let currentStreak = streakDoc.exists() ? streakDoc.data() : {
             count: 0,
             lastMessageDate: null,
             lastMessageFrom: null,
@@ -2684,17 +2765,26 @@ async function updateStreakOnMessage(chatId, senderId) {
 
         const lastMessageDate = currentStreak.lastMessageDate ? new Date(currentStreak.lastMessageDate).toDateString() : null;
         const lastBothMessagedDate = currentStreak.lastBothMessagedDate ? new Date(currentStreak.lastBothMessagedDate).toDateString() : null;
+        const lastMessageFrom = currentStreak.lastMessageFrom;
 
-        // Check if both users have messaged today
-        const bothMessagedToday = lastMessageDate === today && lastBothMessagedDate === today && currentStreak.lastMessageFrom !== senderId;
-
-        let newCount = currentStreak.count;
+        let newCount = currentStreak.count || 0;
         let newBothMessagedDate = lastBothMessagedDate;
 
+        console.log('Streak Debug:', {
+            today,
+            lastMessageDate,
+            lastBothMessagedDate,
+            lastMessageFrom,
+            currentSenderId: senderId,
+            isDifferentSender: lastMessageFrom !== senderId,
+            bothMessagedToday: lastMessageDate === today && lastMessageFrom !== senderId
+        });
+
         // If both users messaged today (different senders), increment streak
-        if (lastMessageDate === today && currentStreak.lastMessageFrom !== senderId && lastBothMessagedDate !== today) {
-            newCount = currentStreak.count + 1;
+        if (lastMessageDate === today && lastMessageFrom && lastMessageFrom !== senderId && lastBothMessagedDate !== today) {
+            newCount = (currentStreak.count || 0) + 1;
             newBothMessagedDate = today;
+            console.log('Streak incremented to:', newCount);
         }
 
         // Update streak data

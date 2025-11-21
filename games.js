@@ -132,7 +132,7 @@ function generateRoomId() {
 function getUrlParams() {
     const params = new URLSearchParams(window.location.search);
     return {
-        roomId: params.get('roomID'),
+        roomId: params.get('roomId'),
         mode: params.get('mode')
     };
 }

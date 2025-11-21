@@ -9,20 +9,11 @@
 </head>
 
 <body>
-    <!-- Global Loading Screen -->
-    <div id="global-loading" class="global-loading">
-        <div class="loading-content">
-            <div class="loading-spinner"></div>
-            <p class="loading-text">Loading...</p>
-        </div>
-    </div>
-
     <!-- Calculator View (Default Visible) -->
     <div id="calculator-view">
         <div class="calculator-container">
             <div class="calculator-header">
-                <button id="calc-login-trigger" class="calc-icon" title="Sign In">π</button>
-                <button id="calc-logout-btn" class="calc-icon hidden" title="Logout">⎋</button>
+                <button id="login-trigger" class="login-icon" title="Settings">π</button>
             </div>
             <div class="calculator-display">
                 <div id="display">0</div>
@@ -108,12 +99,6 @@
                             <span>+</span>
                         </div>
                         <small>Add story</small>
-                        <div class="story-upload-progress hidden" id="story-upload-progress">
-                            <div class="progress-bar-container">
-                                <div class="progress-bar-fill"></div>
-                            </div>
-                            <span class="progress-text">0%</span>
-                        </div>
                     </button>
                     <div class="story-list" id="story-list"></div>
                 </div>
@@ -135,11 +120,6 @@
                             <div id="chat-user-status" class="user-status">offline</div>
                         </div>
                     </div>
-                    <div id="streak-badge" class="streak-badge hidden">
-                        <span class="streak-icon">🔥</span>
-                        <span id="streak-count" class="streak-count">0</span>
-                    </div>
-                    <button id="chat-settings-btn" class="chat-settings-btn" title="Chat Settings">⚙️</button>
                 </div>
 
                 <div class="messages-container" id="messages-container">
@@ -217,7 +197,6 @@
 
     <!-- Message Options Menu (Hidden by Default) -->
     <div id="message-options" class="message-options hidden">
-        <button class="option-btn" data-action="copy">Copy</button>
         <button class="option-btn" data-action="reply">Reply</button>
         <button class="option-btn" data-action="edit">Edit</button>
         <button class="option-btn" data-action="delete">Delete</button>
@@ -283,156 +262,46 @@
                         <div class="user-avatar large" id="profile-avatar-circle">?</div>
                     </div>
                     <button id="change-avatar-btn" class="secondary">Change photo</button>
-                </div>
-                <label for="profile-name-input">Display name</label>
-                <input type="text" id="profile-name-input" placeholder="Display name">
-                <label for="profile-passcode-input">Passcode</label>
-                <input type="text" id="profile-passcode-input" placeholder="Unlock passcode">
-                <label for="profile-status-input">Status message</label>
-                <textarea id="profile-status-input" rows="2"
-                    placeholder="Let friends know what you're up to"></textarea>
-                <div class="profile-modal-actions">
-                    <button id="cancel-profile-btn" class="secondary">Cancel</button>
-                    <button id="save-profile-btn">Save changes</button>
-                </div>
-                <div class="profile-danger-zone">
-                    <button id="delete-account-btn" class="danger">Delete Account</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Account Confirmation Modal -->
-    <div id="delete-account-modal" class="modal hidden">
-        <div class="modal-content delete-confirmation-modal">
-            <h2>Delete Account?</h2>
-            <p class="delete-warning">This action is permanent and cannot be undone.</p>
-            <div class="delete-info">
-                <p><strong>Deleting your account will remove:</strong></p>
-                <ul>
-                    <li>Your profile and all settings</li>
-                    <li>All your messages and chats</li>
-                    <li>All your stories</li>
-                    <li>All associated data</li>
-                </ul>
-            </div>
-            <div class="delete-email-verification">
-                <label for="delete-email-input">Type your email to confirm:</label>
-                <input type="email" id="delete-email-input" placeholder="Enter your email" autocomplete="off">
-                <span id="delete-email-error" class="error-text hidden"></span>
-            </div>
-            <div class="delete-modal-actions">
-                <button id="cancel-delete-btn" class="secondary">Cancel</button>
-                <button id="confirm-delete-btn" class="danger">Delete My Account</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Chat Settings Modal -->
-    <div id="chat-settings-modal" class="modal hidden">
-        <div class="modal-content chat-settings-modal">
-            <span class="close-modal" id="close-chat-settings">&times;</span>
-            <h2>Chat Settings</h2>
-            <div class="chat-settings-body">
-                <!-- Nickname Section -->
-                <div class="nickname-section">
-                    <label for="nickname-input">Nickname for this chat</label>
-                    <input type="text" id="nickname-input" placeholder="Set a nickname (optional)" maxlength="50">
-                    <p class="nickname-hint">Only you can see this nickname</p>
-                </div>
-                <div class="chat-settings-actions">
-                    <button id="remove-nickname-btn" class="secondary">Remove Nickname</button>
-                    <button id="save-nickname-btn">Save Nickname</button>
-                </div>
-
-                <!-- Theme Customization Section -->
-                <hr class="settings-divider">
-                <div class="theme-section">
-                    <h3>Chat Theme</h3>
-                    
-                    <!-- Message Bubble Colors -->
-                    <div class="theme-subsection">
-                        <label>Message Bubbles</label>
-                        <div class="color-picker-group">
-                            <div class="color-picker-item">
-                                <label for="sent-bubble-color">Your Messages</label>
-                                <input type="color" id="sent-bubble-color" class="color-picker" title="Sent message color">
+                    <div id="story-viewer" class="story-viewer hidden">
+                        <div class="story-viewer-backdrop"></div>
+                        <div class="story-viewer-content">
+                            <button id="story-viewer-close" class="story-viewer-close">×</button>
+                            <div class="story-progress" id="story-progress"></div>
+                            <div class="story-viewer-header">
+                                <div class="story-viewer-user">
+                                    <div class="user-avatar" id="story-viewer-avatar">?</div>
+                                    <div>
+                                        <div id="story-viewer-name">Name</div>
+                                        <div id="story-viewer-time" class="story-viewer-time">Just now</div>
+                                    </div>
+                                </div>
+                                <div class="story-viewer-controls">
+                                    <button id="story-prev-btn" class="story-nav-btn">‹</button>
+                                    <button id="story-next-btn" class="story-nav-btn">›</button>
+                                </div>
                             </div>
-                            <div class="color-picker-item">
-                                <label for="received-bubble-color">Their Messages</label>
-                                <input type="color" id="received-bubble-color" class="color-picker" title="Received message color">
+                            <div id="story-viewer-media-container" class="story-viewer-media-container">
+                                <!-- Will be dynamically populated with <img> or <video> -->
+                            </div>
+                            <div class="story-viewer-footer">
+                                <button id="story-like-btn" class="story-like-btn">♡</button>
+                                <span id="story-like-count" class="story-like-count">0 likes</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Chat Background -->
-                    <div class="theme-subsection">
-                        <label>Chat Background</label>
-                        <div class="background-options">
-                            <div class="bg-option">
-                                <label for="bg-color">Background Color</label>
-                                <input type="color" id="bg-color" class="color-picker" title="Background color">
-                            </div>
-                            <div class="bg-option">
-                                <label for="bg-image">Upload Background Image</label>
-                                <input type="file" id="bg-image" accept="image/*" class="hidden">
-                                <button id="bg-image-btn" class="secondary small">Choose Image</button>
-                                <button id="remove-bg-image-btn" class="secondary small danger-text">Remove Image</button>
-                            </div>
+                    <!-- Image Viewer Modal -->
+                    <div id="image-viewer" class="image-viewer hidden">
+                        <div class="image-viewer-backdrop"></div>
+                        <div class="image-viewer-content">
+                            <button id="image-viewer-close" class="image-viewer-close">×</button>
+                            <img id="image-viewer-img" src="" alt="Preview" class="image-viewer-img">
+                            <a id="image-viewer-download" class="image-viewer-download" download>Download</a>
                         </div>
                     </div>
 
-                    <!-- Theme Actions -->
-                    <div class="theme-actions">
-                        <button id="reset-theme-btn" class="secondary">Reset to Default</button>
-                        <button id="apply-theme-btn">Apply Theme</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Story Viewer -->
-    <div id="story-viewer" class="story-viewer hidden">
-        <div class="story-viewer-backdrop"></div>
-        <div class="story-viewer-content">
-            <button id="story-viewer-close" class="story-viewer-close">×</button>
-            <div class="story-progress" id="story-progress"></div>
-            <div class="story-viewer-header">
-                <div class="story-viewer-user">
-                    <div class="user-avatar" id="story-viewer-avatar">?</div>
-                    <div>
-                        <div id="story-viewer-name">Name</div>
-                        <div id="story-viewer-time" class="story-viewer-time">Just now</div>
-                    </div>
-                </div>
-                <div class="story-viewer-controls">
-                    <button id="story-prev-btn" class="story-nav-btn">‹</button>
-                    <button id="story-next-btn" class="story-nav-btn">›</button>
-                </div>
-            </div>
-            <div id="story-viewer-media-container" class="story-viewer-media-container">
-                <!-- Will be dynamically populated with <img> or <video> -->
-            </div>
-            <div class="story-viewer-footer">
-                <button id="story-like-btn" class="story-like-btn">♡</button>
-                <span id="story-like-count" class="story-like-count">0 likes</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Image Viewer Modal -->
-    <div id="image-viewer" class="image-viewer hidden">
-        <div class="image-viewer-backdrop"></div>
-        <div class="image-viewer-content">
-            <button id="image-viewer-close" class="image-viewer-close">×</button>
-            <img id="image-viewer-img" src="" alt="Preview" class="image-viewer-img">
-            <a id="image-viewer-download" class="image-viewer-download" download>Download</a>
-        </div>
-    </div>
-
-    <!-- Firebase SDK -->
-    <script type="module" src="script.js"></script>
+                    <!-- Firebase SDK -->
+                    <script type="module" src="script.js"></script>
 </body>
 
 </html>

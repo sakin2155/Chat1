@@ -2635,12 +2635,6 @@ video.story-viewer-media {
         left: 0;
     }
 
-    .chat-container {
-        position: relative;
-        width: 100%;
-        height: 100%;
-    }
-
     .user-list-container {
         position: absolute;
         width: 100%;

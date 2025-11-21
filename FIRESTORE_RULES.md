@@ -42,7 +42,7 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
-    // Game system rules
+    // Game system rules - Tic-Tac-Toe
     match /games/{roomId} {
       allow read, write: if request.auth != null;
       
@@ -55,6 +55,19 @@ service cloud.firestore {
       }
       
       match /chat/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    // Game system rules - Rock Paper Scissors
+    match /rps_games/{roomId} {
+      allow read, write: if request.auth != null;
+      
+      match /players/{playerId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      match /rounds/{roundId} {
         allow read, write: if request.auth != null;
       }
     }

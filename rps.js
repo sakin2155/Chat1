@@ -1,0 +1,474 @@
+// ===========================
+// Firebase SDK Imports
+// ===========================
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
+import {
+    getAuth,
+    onAuthStateChanged
+} from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
+import {
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc,
+    onSnapshot,
+    collection,
+    addDoc,
+    query,
+    orderBy,
+    serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+
+// ===========================
+// Firebase Configuration
+// ===========================
+const firebaseConfig = {
+    apiKey: "AIzaSyCjU48-MYfwQLDPc7C04lcyROT6s5cLH-8",
+    authDomain: "chat-f5b70.firebaseapp.com",
+    projectId: "chat-f5b70",
+    storageBucket: "chat-f5b70.firebasestorage.app",
+    messagingSenderId: "158106000000",
+    appId: "1:158106000000:web:6cd2c27cdd676d306da465",
+    measurementId: "G-6H096XKK6S"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ===========================
+// Global State
+// ===========================
+let currentUser = null;
+let currentUserData = null;
+let roomId = null;
+let gameMode = null; // 'host' or 'join'
+let playerNumber = null; // 1 or 2
+let opponentData = null;
+let currentRound = {
+    player1Choice: null,
+    player2Choice: null,
+    result: null
+};
+let sessionStats = {
+    wins: 0,
+    losses: 0,
+    draws: 0
+};
+
+// ===========================
+// DOM Elements
+// ===========================
+const globalLoading = document.getElementById('global-loading');
+const gameContainer = document.getElementById('game-container');
+const backToChatBtn = document.getElementById('back-to-chat-btn');
+const waitingScreen = document.getElementById('waiting-screen');
+const gameBoard = document.getElementById('game-board');
+const statusText = document.getElementById('status-text');
+const choiceBtns = document.querySelectorAll('.choice-btn');
+const resultDisplay = document.getElementById('result-display');
+const yourChoice = document.getElementById('your-choice');
+const opponentChoice = document.getElementById('opponent-choice');
+const resultMessage = document.getElementById('result-message');
+const playAgainBtn = document.getElementById('play-again-btn');
+const winsCount = document.getElementById('wins-count');
+const lossesCount = document.getElementById('losses-count');
+const drawsCount = document.getElementById('draws-count');
+const player1Avatar = document.getElementById('player-1-avatar');
+const player1Name = document.getElementById('player-1-name');
+const player1Score = document.getElementById('player-1-score');
+const player2Avatar = document.getElementById('player-2-avatar');
+const player2Name = document.getElementById('player-2-name');
+const player2Score = document.getElementById('player-2-score');
+
+// ===========================
+// Utility Functions
+// ===========================
+function showLoading(text = 'Loading...') {
+    if (globalLoading) {
+        const loadingText = globalLoading.querySelector('.loading-text');
+        if (loadingText) {
+            loadingText.textContent = text;
+        }
+        globalLoading.classList.remove('hidden');
+    }
+}
+
+function hideLoading() {
+    if (globalLoading) {
+        globalLoading.classList.add('hidden');
+    }
+}
+
+function getInitials(name) {
+    if (!name) return '?';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function applyAvatarToElement(element, userData) {
+    if (!element || !userData) return;
+    
+    const initials = getInitials(userData.displayName || userData.email || '?');
+    element.textContent = initials;
+    
+    if (userData.photoURL && userData.photoURL.startsWith('http')) {
+        element.style.backgroundImage = `url(${userData.photoURL})`;
+        element.classList.add('has-image');
+    } else {
+        element.style.backgroundImage = '';
+        element.classList.remove('has-image');
+    }
+}
+
+// ===========================
+// URL Parameter Parsing
+// ===========================
+function getUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+        roomId: params.get('roomId'),
+        mode: params.get('mode')
+    };
+}
+
+// ===========================
+// Game Logic
+// ===========================
+function determineWinner(choice1, choice2) {
+    if (choice1 === choice2) return 'draw';
+    
+    if (choice1 === 'rock') {
+        return choice2 === 'scissors' ? 'player1' : 'player2';
+    } else if (choice1 === 'paper') {
+        return choice2 === 'rock' ? 'player1' : 'player2';
+    } else if (choice1 === 'scissors') {
+        return choice2 === 'paper' ? 'player1' : 'player2';
+    }
+}
+
+function getChoiceEmoji(choice) {
+    const emojis = {
+        rock: '🪨',
+        paper: '📄',
+        scissors: '✂️'
+    };
+    return emojis[choice] || choice;
+}
+
+function getChoiceLabel(choice) {
+    return choice.charAt(0).toUpperCase() + choice.slice(1);
+}
+
+// ===========================
+// UI Updates
+// ===========================
+function updatePlayerInfo() {
+    if (playerNumber === 1) {
+        applyAvatarToElement(player1Avatar, currentUserData);
+        player1Name.textContent = currentUserData?.displayName || 'You';
+        
+        if (opponentData) {
+            applyAvatarToElement(player2Avatar, opponentData);
+            player2Name.textContent = opponentData.displayName || 'Opponent';
+        }
+    } else {
+        applyAvatarToElement(player2Avatar, currentUserData);
+        player2Name.textContent = currentUserData?.displayName || 'You';
+        
+        if (opponentData) {
+            applyAvatarToElement(player1Avatar, opponentData);
+            player1Name.textContent = opponentData.displayName || 'Opponent';
+        }
+    }
+}
+
+function showWaitingScreen() {
+    waitingScreen.classList.remove('hidden');
+    gameBoard.classList.add('hidden');
+}
+
+function hideWaitingScreen() {
+    console.log('Hiding waiting screen, showing game board');
+    waitingScreen.classList.add('hidden');
+    gameBoard.classList.remove('hidden');
+    resetRound();
+}
+
+function resetRound() {
+    currentRound = {
+        player1Choice: null,
+        player2Choice: null,
+        result: null
+    };
+    
+    // Enable all choice buttons
+    choiceBtns.forEach(btn => {
+        btn.disabled = false;
+    });
+    
+    resultDisplay.classList.add('hidden');
+    statusText.textContent = 'Make your choice!';
+}
+
+function updateScoreDisplay() {
+    winsCount.textContent = sessionStats.wins;
+    lossesCount.textContent = sessionStats.losses;
+    drawsCount.textContent = sessionStats.draws;
+}
+
+// ===========================
+// Game Initialization
+// ===========================
+async function initializeGame() {
+    const params = getUrlParams();
+    roomId = params.roomId;
+    gameMode = params.mode;
+
+    console.log('Initializing RPS game with roomId:', roomId, 'mode:', gameMode);
+
+    if (!roomId || !gameMode) {
+        console.error('Invalid game parameters');
+        return;
+    }
+
+    if (gameMode === 'host') {
+        console.log('Host mode - registering as player 1');
+        playerNumber = 1;
+        showWaitingScreen();
+        
+        // Register player 1 in Firestore
+        try {
+            const player1Data = {
+                uid: currentUser.uid,
+                displayName: currentUserData?.displayName || 'Player 1',
+                photoURL: currentUserData?.photoURL || '',
+                joinedAt: serverTimestamp()
+            };
+            console.log('Registering player 1 with data:', player1Data);
+            await setDoc(doc(db, 'rps_games', roomId, 'players', 'player1'), player1Data);
+            console.log('Player 1 registered successfully');
+        } catch (error) {
+            console.error('Error registering player 1:', error);
+        }
+        
+        // Listen for player 2 joining
+        listenForPlayer2Join();
+    } else if (gameMode === 'join') {
+        console.log('Join mode - registering as player 2');
+        playerNumber = 2;
+        showWaitingScreen();
+        
+        // Register player 2 in Firestore
+        try {
+            const player2Data = {
+                uid: currentUser.uid,
+                displayName: currentUserData?.displayName || 'Player 2',
+                photoURL: currentUserData?.photoURL || '',
+                joinedAt: serverTimestamp()
+            };
+            console.log('Registering player 2 with data:', player2Data);
+            await setDoc(doc(db, 'rps_games', roomId, 'players', 'player2'), player2Data);
+            console.log('Player 2 registered successfully');
+        } catch (error) {
+            console.error('Error registering player 2:', error);
+        }
+        
+        // Listen for player 1 presence
+        listenForPlayer1Presence();
+    }
+
+    updatePlayerInfo();
+    listenForRoundUpdates();
+}
+
+// ===========================
+// Opponent Detection
+// ===========================
+function listenForPlayer2Join() {
+    console.log('Player 1 listening for player 2 join...');
+    const unsubscribe = onSnapshot(doc(db, 'rps_games', roomId, 'players', 'player2'), (docSnap) => {
+        console.log('Player 2 listener triggered. Exists:', docSnap.exists());
+        if (docSnap.exists()) {
+            const player2Data = docSnap.data();
+            console.log('Player 2 data from Firestore:', player2Data);
+            opponentData = {
+                uid: player2Data.uid,
+                displayName: player2Data.displayName,
+                photoURL: player2Data.photoURL,
+                email: player2Data.email || ''
+            };
+            console.log('Player 2 joined, opponent data set:', opponentData);
+            updatePlayerInfo();
+            hideWaitingScreen();
+        } else {
+            console.log('Player 2 document does not exist yet');
+        }
+    }, (error) => {
+        console.error('Error listening for player 2:', error);
+    });
+}
+
+function listenForPlayer1Presence() {
+    console.log('Player 2 listening for player 1 presence...');
+    const unsubscribe = onSnapshot(doc(db, 'rps_games', roomId, 'players', 'player1'), (docSnap) => {
+        console.log('Player 1 listener triggered. Exists:', docSnap.exists());
+        if (docSnap.exists()) {
+            const player1Data = docSnap.data();
+            console.log('Player 1 data from Firestore:', player1Data);
+            opponentData = {
+                uid: player1Data.uid,
+                displayName: player1Data.displayName,
+                photoURL: player1Data.photoURL,
+                email: player1Data.email || ''
+            };
+            console.log('Player 1 found, opponent data set:', opponentData);
+            updatePlayerInfo();
+            hideWaitingScreen();
+        } else {
+            console.log('Player 1 document does not exist yet');
+        }
+    }, (error) => {
+        console.error('Error listening for player 1:', error);
+    });
+}
+
+// ===========================
+// Round Management
+// ===========================
+async function submitChoice(choice) {
+    console.log(`Player ${playerNumber} chose: ${choice}`);
+    
+    // Disable all buttons
+    choiceBtns.forEach(btn => btn.disabled = true);
+    statusText.textContent = 'Waiting for opponent...';
+    
+    // Submit choice to Firestore
+    try {
+        const choiceKey = playerNumber === 1 ? 'player1Choice' : 'player2Choice';
+        await setDoc(doc(db, 'rps_games', roomId, 'rounds', 'current'), {
+            [choiceKey]: choice,
+            [`player${playerNumber}SubmittedAt`]: serverTimestamp()
+        }, { merge: true });
+        console.log(`Choice submitted: ${choice}`);
+    } catch (error) {
+        console.error('Error submitting choice:', error);
+    }
+}
+
+function listenForRoundUpdates() {
+    console.log('Setting up listener for round updates...');
+    const unsubscribe = onSnapshot(doc(db, 'rps_games', roomId, 'rounds', 'current'), (docSnap) => {
+        if (docSnap.exists()) {
+            const roundData = docSnap.data();
+            console.log('Round data updated:', roundData);
+            
+            const player1Choice = roundData.player1Choice;
+            const player2Choice = roundData.player2Choice;
+            
+            // Both players have made their choice
+            if (player1Choice && player2Choice) {
+                const result = determineWinner(player1Choice, player2Choice);
+                displayResult(player1Choice, player2Choice, result);
+            }
+        }
+    }, (error) => {
+        console.error('Error listening for round updates:', error);
+    });
+}
+
+function displayResult(player1Choice, player2Choice, result) {
+    console.log('Displaying result:', result);
+    
+    resultDisplay.classList.remove('hidden');
+    
+    // Show choices
+    yourChoice.textContent = playerNumber === 1 ? getChoiceLabel(player1Choice) : getChoiceLabel(player2Choice);
+    opponentChoice.textContent = playerNumber === 1 ? getChoiceLabel(player2Choice) : getChoiceLabel(player1Choice);
+    
+    // Determine result for current player
+    let resultText = '';
+    let resultClass = '';
+    
+    if (result === 'draw') {
+        resultText = "It's a Draw!";
+        resultClass = 'draw';
+        sessionStats.draws++;
+    } else if ((playerNumber === 1 && result === 'player1') || (playerNumber === 2 && result === 'player2')) {
+        resultText = 'You Won! 🎉';
+        resultClass = 'win';
+        sessionStats.wins++;
+    } else {
+        resultText = 'You Lost! 😢';
+        resultClass = 'loss';
+        sessionStats.losses++;
+    }
+    
+    resultMessage.textContent = resultText;
+    resultMessage.className = `result-message ${resultClass}`;
+    
+    updateScoreDisplay();
+    statusText.textContent = resultText;
+}
+
+async function playAgain() {
+    console.log('Starting new round...');
+    
+    // Clear current round data
+    try {
+        await setDoc(doc(db, 'rps_games', roomId, 'rounds', 'current'), {
+            player1Choice: null,
+            player2Choice: null
+        }, { merge: true });
+    } catch (error) {
+        console.error('Error clearing round:', error);
+    }
+    
+    resetRound();
+}
+
+// ===========================
+// Event Listeners
+// ===========================
+choiceBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const choice = btn.dataset.choice;
+        submitChoice(choice);
+    });
+});
+
+playAgainBtn.addEventListener('click', playAgain);
+
+backToChatBtn.addEventListener('click', () => {
+    window.location.href = 'index.html';
+});
+
+// ===========================
+// Authentication
+// ===========================
+onAuthStateChanged(auth, async (user) => {
+    try {
+        if (user) {
+            currentUser = user;
+            
+            // Fetch user data from Firestore
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+                currentUserData = userDoc.data();
+            }
+
+            // Hide loading and show game container
+            gameContainer.classList.remove('hidden');
+
+            // Initialize the game
+            await initializeGame();
+        } else {
+            // Redirect to login
+            window.location.href = 'index.html';
+        }
+    } catch (error) {
+        console.error('Auth error:', error);
+    } finally {
+        hideLoading();
+    }
+});

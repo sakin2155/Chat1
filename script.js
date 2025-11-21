@@ -1198,12 +1198,21 @@ function createMessageElement(messageData) {
         // Game invite card
         const inviterName = messageData.invitedByName || 'Someone';
         const roomId = messageData.roomId;
+        const gameType = messageData.gameType || 'tictactoe';
+        
+        // Determine game title and emoji
+        let gameTitle = 'Tic-Tac-Toe';
+        let gameEmoji = '⭕';
+        if (gameType === 'rps') {
+            gameTitle = 'Rock Paper Scissors';
+            gameEmoji = '✂️';
+        }
         
         content = `
             <div class="game-invite-card">
-                <div class="game-invite-header">⭕ Game Invite</div>
-                <div class="game-invite-text">${escapeHtml(inviterName)} challenged you to Tic-Tac-Toe!</div>
-                <button class="game-invite-btn" data-room-id="${roomId}" data-game-type="tictactoe">
+                <div class="game-invite-header">${gameEmoji} Game Invite</div>
+                <div class="game-invite-text">${escapeHtml(inviterName)} challenged you to ${gameTitle}!</div>
+                <button class="game-invite-btn" data-room-id="${roomId}" data-game-type="${gameType}">
                     Tap to Play
                 </button>
             </div>
@@ -1430,9 +1439,12 @@ function createMessageElement(messageData) {
                 gameInviteBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     const roomId = gameInviteBtn.dataset.roomId;
+                    const gameType = gameInviteBtn.dataset.gameType || 'tictactoe';
                     
                     if (roomId) {
-                        window.location.href = `games.html?roomId=${roomId}&mode=join`;
+                        // Determine which game file to use
+                        const gameFile = gameType === 'rps' ? 'rps.html' : 'games.html';
+                        window.location.href = `${gameFile}?roomId=${roomId}&mode=join`;
                     }
                 });
             }
@@ -3117,12 +3129,23 @@ async function handleGameInvite(gameType = 'tictactoe') {
         // Generate unique room ID
         const roomId = generateGameRoomId();
         
+        // Determine game details
+        let gameTitle = 'Tic-Tac-Toe';
+        let gameFile = 'games.html';
+        let gameEmoji = '⭕';
+        
+        if (gameType === 'rps') {
+            gameTitle = 'Rock Paper Scissors';
+            gameFile = 'rps.html';
+            gameEmoji = '✂️';
+        }
+        
         // Create game invite message
         const gameInviteMessage = {
-            text: `⭕ ${currentUserData?.displayName || 'Someone'} challenged you to Tic-Tac-Toe!`,
+            text: `${gameEmoji} ${currentUserData?.displayName || 'Someone'} challenged you to ${gameTitle}!`,
             type: 'game_invite',
             roomId: roomId,
-            gameType: 'tictactoe',
+            gameType: gameType,
             invitedBy: currentUser.uid,
             invitedByName: currentUserData?.displayName || 'Unknown',
             invitedByAvatar: currentUserData?.photoURL || '',
@@ -3134,7 +3157,7 @@ async function handleGameInvite(gameType = 'tictactoe') {
 
         // Redirect host to game page
         setTimeout(() => {
-            window.location.href = `games.html?roomId=${roomId}&mode=host`;
+            window.location.href = `${gameFile}?roomId=${roomId}&mode=host`;
         }, 500);
 
         hideLoading();
@@ -3182,6 +3205,8 @@ if (mediaMenu) {
             openStickerSheet();
         } else if (action === 'game-tictactoe') {
             handleGameInvite('tictactoe');
+        } else if (action === 'game-rps') {
+            handleGameInvite('rps');
         }
     });
 }

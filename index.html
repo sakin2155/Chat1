@@ -166,7 +166,13 @@
                 </div>
 
                 <div class="message-input-container">
-                    <button id="media-menu-btn" class="icon-btn" title="Add media">📎</button>
+                    <button id="media-menu-btn" class="icon-btn" title="Add media">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                    </button>
                     <div id="media-menu" class="media-menu hidden">
                         <button class="media-menu-item" data-action="image">
                             <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -332,7 +338,8 @@
     <div id="clear-chat-confirmation-modal" class="modal hidden">
         <div class="modal-content confirmation-modal">
             <h2>Clear All Messages?</h2>
-            <p class="confirmation-warning">⚠️ This will permanently delete all messages in this chat from the database for both users.</p>
+            <p class="confirmation-warning">⚠️ This will permanently delete all messages in this chat from the database
+                for both users.</p>
             <p class="confirmation-message">This action cannot be undone.</p>
             <div class="confirmation-actions">
                 <button id="confirm-clear-cancel-btn" class="secondary">Cancel</button>
@@ -367,18 +374,20 @@
                 <hr class="settings-divider">
                 <div class="theme-section">
                     <h3>Chat Theme</h3>
-                    
+
                     <!-- Message Bubble Colors -->
                     <div class="theme-subsection">
                         <label>Message Bubbles</label>
                         <div class="color-picker-group">
                             <div class="color-picker-item">
                                 <label for="sent-bubble-color">Your Messages</label>
-                                <input type="color" id="sent-bubble-color" class="color-picker" title="Sent message color">
+                                <input type="color" id="sent-bubble-color" class="color-picker"
+                                    title="Sent message color">
                             </div>
                             <div class="color-picker-item">
                                 <label for="received-bubble-color">Their Messages</label>
-                                <input type="color" id="received-bubble-color" class="color-picker" title="Received message color">
+                                <input type="color" id="received-bubble-color" class="color-picker"
+                                    title="Received message color">
                             </div>
                         </div>
                     </div>
@@ -395,7 +404,8 @@
                                 <label for="bg-image">Upload Background Image</label>
                                 <input type="file" id="bg-image" accept="image/*" class="hidden">
                                 <button id="bg-image-btn" class="secondary small">Choose Image</button>
-                                <button id="remove-bg-image-btn" class="secondary small danger-text">Remove Image</button>
+                                <button id="remove-bg-image-btn" class="secondary small danger-text">Remove
+                                    Image</button>
                             </div>
                         </div>
                     </div>
@@ -411,7 +421,8 @@
                 <hr class="settings-divider">
                 <div class="clear-chats-section">
                     <h3>Clear Chat</h3>
-                    <p class="clear-chats-warning">⚠️ This will permanently delete all messages in this chat from the database for both users. This action cannot be undone.</p>
+                    <p class="clear-chats-warning">⚠️ This will permanently delete all messages in this chat from the
+                        database for both users. This action cannot be undone.</p>
                     <button id="clear-all-chats-btn" class="danger">Clear All Messages</button>
                 </div>
             </div>

@@ -1133,6 +1133,7 @@ function loadMessages() {
                 messageCount++;
             } else if (change.type === 'modified') {
                 updateMessage(change.doc.id, change.doc.data());
+                // Don't treat modified messages as "new" to prevent unnecessary scrolling
             } else if (change.type === 'removed') {
                 removeMessage(change.doc.id);
             }
@@ -1490,57 +1491,64 @@ function updateMessage(messageId, messageData) {
         return;
     }
 
-    // Otherwise, update only the parts that changed (prevents flickering)
-
-    // Update edited label
-    const metaEl = messageEl.querySelector('.message-meta');
-    if (messageData.isEdited && !metaEl) {
-        const bubble = messageEl.querySelector('.message-bubble');
-        const editedSpan = document.createElement('span');
-        editedSpan.className = 'message-meta';
-        editedSpan.innerHTML = '<span class="message-edited">(edited)</span>';
-        const statusEl = bubble.querySelector('.message-status');
-        if (statusEl) {
-            bubble.insertBefore(editedSpan, statusEl);
-        } else {
-            bubble.appendChild(editedSpan);
-        }
-    }
-
-    // Update status (for own messages)
-    if (isOwnMessage) {
-        const statusEl = messageEl.querySelector('.message-status');
-        if (statusEl) {
-            statusEl.textContent = getStatusText(messageData);
-        }
-    }
-
-    // Update reactions
-    const reactionsContainer = messageEl.querySelector('.message-reactions');
-    if (messageData.reactions && messageData.reactions.length > 0) {
-        const reactionCounts = {};
-        messageData.reactions.forEach(r => {
-            reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-        });
-        let reactionsHtml = '';
-        for (const [emoji, count] of Object.entries(reactionCounts)) {
-            reactionsHtml += `<span class="reaction-badge">${emoji} ${count}</span>`;
+    // Use requestAnimationFrame to batch DOM updates and prevent flickering
+    requestAnimationFrame(() => {
+        // Update message text if it changed
+        const messageTextEl = messageEl.querySelector('.message-text');
+        if (messageTextEl && messageData.text) {
+            messageTextEl.innerHTML = formatMessageText(messageData.text);
         }
 
-        if (reactionsContainer) {
-            reactionsContainer.innerHTML = reactionsHtml;
-        } else {
+        // Update edited label
+        const metaEl = messageEl.querySelector('.message-meta');
+        if (messageData.isEdited && !metaEl) {
             const bubble = messageEl.querySelector('.message-bubble');
-            const newReactionsDiv = document.createElement('div');
-            newReactionsDiv.className = 'message-reactions';
-            newReactionsDiv.innerHTML = reactionsHtml;
-            bubble.appendChild(newReactionsDiv);
+            const editedSpan = document.createElement('span');
+            editedSpan.className = 'message-meta';
+            editedSpan.innerHTML = '<span class="message-edited">(edited)</span>';
+            const statusEl = bubble.querySelector('.message-status');
+            if (statusEl) {
+                bubble.insertBefore(editedSpan, statusEl);
+            } else {
+                bubble.appendChild(editedSpan);
+            }
         }
-    } else if (reactionsContainer) {
-        reactionsContainer.remove();
-    }
 
-    updateMessageStatusVisibility();
+        // Update status (for own messages)
+        if (isOwnMessage) {
+            const statusEl = messageEl.querySelector('.message-status');
+            if (statusEl) {
+                statusEl.textContent = getStatusText(messageData);
+            }
+        }
+
+        // Update reactions
+        const reactionsContainer = messageEl.querySelector('.message-reactions');
+        if (messageData.reactions && messageData.reactions.length > 0) {
+            const reactionCounts = {};
+            messageData.reactions.forEach(r => {
+                reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+            });
+            let reactionsHtml = '';
+            for (const [emoji, count] of Object.entries(reactionCounts)) {
+                reactionsHtml += `<span class="reaction-badge">${emoji} ${count}</span>`;
+            }
+
+            if (reactionsContainer) {
+                reactionsContainer.innerHTML = reactionsHtml;
+            } else {
+                const bubble = messageEl.querySelector('.message-bubble');
+                const newReactionsDiv = document.createElement('div');
+                newReactionsDiv.className = 'message-reactions';
+                newReactionsDiv.innerHTML = reactionsHtml;
+                bubble.appendChild(newReactionsDiv);
+            }
+        } else if (reactionsContainer) {
+            reactionsContainer.remove();
+        }
+
+        updateMessageStatusVisibility();
+    });
 }
 
 function removeMessage(messageId) {
@@ -2836,8 +2844,10 @@ if (messageInput) {
     });
 
     messageInput.addEventListener('input', () => {
-        // Also scroll when typing
-        scrollToBottom(false);
+        // Only scroll when typing a new message, not when editing
+        if (!editingMessageId) {
+            scrollToBottom(false);
+        }
     });
 }
 
@@ -2875,6 +2885,7 @@ async function sendMessage() {
             });
 
             messageInput.value = '';
+            messageInput.style.height = 'auto';
             cancelEdit();
             updateTypingStatus(false);
             return;

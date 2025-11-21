@@ -17,7 +17,9 @@ import {
     addDoc,
     query,
     orderBy,
-    limit
+    limit,
+    getDocs,
+    deleteDoc
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // ===========================
@@ -252,13 +254,29 @@ function updateTurnIndicator() {
     }
 }
 
-function resetBoard() {
+async function resetBoard() {
     gameState = ['', '', '', '', '', '', '', '', ''];
     currentTurn = 'X';
     gameActive = true;
     gameOver = false;
     updateBoardUI();
     updateTurnIndicator();
+    
+    // Clear all moves from Firestore for new game
+    try {
+        const movesRef = collection(db, 'games', roomId, 'moves');
+        const movesSnap = await getDocs(movesRef);
+        
+        for (const doc of movesSnap.docs) {
+            await deleteDoc(doc.ref);
+        }
+        console.log('All moves cleared for new game');
+    } catch (error) {
+        console.error('Error clearing moves:', error);
+    }
+    
+    // Save reset game state to Firestore
+    await saveGameState();
 }
 
 function showGameOverModal(result) {
@@ -553,9 +571,10 @@ boardCells.forEach(cell => {
     });
 });
 
-playAgainBtn.addEventListener('click', () => {
+playAgainBtn.addEventListener('click', async () => {
     closeGameOverModal();
-    resetBoard();
+    await resetBoard();
+    console.log('Game reset for both players');
 });
 
 backToChatBtn.addEventListener('click', () => {

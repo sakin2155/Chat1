@@ -3104,7 +3104,7 @@ function generateGameRoomId() {
     return 'game_' + Math.random().toString(36).substr(2, 9);
 }
 
-async function handleGameInvite() {
+async function handleGameInvite(gameType = 'tictactoe') {
     if (!currentChatId || !currentChatUser) {
         alert('Please select a user to challenge');
         return;
@@ -3116,12 +3116,23 @@ async function handleGameInvite() {
         // Generate unique room ID
         const roomId = generateGameRoomId();
         
+        // Determine game details based on type
+        let gameTitle = 'Tic-Tac-Toe';
+        let gameFile = 'games.html';
+        let gameEmoji = '⭕';
+        
+        if (gameType === 'ludo') {
+            gameTitle = 'Ludo Duel';
+            gameFile = 'ludo.html';
+            gameEmoji = '🎲';
+        }
+        
         // Create game invite message
         const gameInviteMessage = {
-            text: `🎮 ${currentUserData?.displayName || 'Someone'} challenged you to Tic-Tac-Toe!`,
+            text: `${gameEmoji} ${currentUserData?.displayName || 'Someone'} challenged you to ${gameTitle}!`,
             type: 'game_invite',
             roomId: roomId,
-            gameType: 'tictactoe',
+            gameType: gameType,
             invitedBy: currentUser.uid,
             invitedByName: currentUserData?.displayName || 'Unknown',
             invitedByAvatar: currentUserData?.photoURL || '',
@@ -3133,7 +3144,7 @@ async function handleGameInvite() {
 
         // Redirect host to game page
         setTimeout(() => {
-            window.location.href = `games.html?roomID=${roomId}&mode=host`;
+            window.location.href = `${gameFile}?roomId=${roomId}&mode=host`;
         }, 500);
 
         hideLoading();
@@ -3179,8 +3190,10 @@ if (mediaMenu) {
             openGifModal();
         } else if (action === 'sticker') {
             openStickerSheet();
-        } else if (action === 'game') {
-            handleGameInvite();
+        } else if (action === 'game-tictactoe') {
+            handleGameInvite('tictactoe');
+        } else if (action === 'game-ludo') {
+            handleGameInvite('ludo');
         }
     });
 }

@@ -9,7 +9,9 @@ import {
 import {
     getFirestore,
     doc,
-    getDoc
+    getDoc,
+    setDoc,
+    onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // ===========================
@@ -320,14 +322,87 @@ async function initializeGame() {
         playerSymbol = 'X';
         opponentSymbol = 'O';
         showWaitingScreen();
+        
+        // Register host in Firestore
+        try {
+            await setDoc(doc(db, 'games', roomId, 'players', 'host'), {
+                uid: currentUser.uid,
+                displayName: currentUserData?.displayName || 'Host',
+                photoURL: currentUserData?.photoURL || '',
+                joinedAt: new Date()
+            });
+        } catch (error) {
+            console.error('Error registering host:', error);
+        }
+        
+        // Listen for guest joining
+        listenForGuestJoin();
     } else if (gameMode === 'join') {
         playerSymbol = 'O';
         opponentSymbol = 'X';
         showWaitingScreen();
+        
+        // Register guest in Firestore
+        try {
+            await setDoc(doc(db, 'games', roomId, 'players', 'guest'), {
+                uid: currentUser.uid,
+                displayName: currentUserData?.displayName || 'Guest',
+                photoURL: currentUserData?.photoURL || '',
+                joinedAt: new Date()
+            });
+        } catch (error) {
+            console.error('Error registering guest:', error);
+        }
+        
+        // Listen for host presence
+        listenForHostPresence();
     }
 
     updatePlayerInfo();
     initializeSocket();
+}
+
+// ===========================
+// Opponent Detection
+// ===========================
+function listenForGuestJoin() {
+    // Host listens for guest joining
+    const unsubscribe = onSnapshot(doc(db, 'games', roomId, 'players', 'guest'), (docSnap) => {
+        if (docSnap.exists()) {
+            const guestData = docSnap.data();
+            opponentData = {
+                uid: guestData.uid,
+                displayName: guestData.displayName,
+                photoURL: guestData.photoURL,
+                email: guestData.email || ''
+            };
+            console.log('Guest joined:', opponentData);
+            updatePlayerInfo();
+            hideWaitingScreen();
+        }
+    }, (error) => {
+        console.error('Error listening for guest:', error);
+    });
+}
+
+function listenForHostPresence() {
+    // Guest listens for host presence
+    const unsubscribe = onSnapshot(doc(db, 'games', roomId, 'players', 'host'), (docSnap) => {
+        if (docSnap.exists()) {
+            const hostData = docSnap.data();
+            opponentData = {
+                uid: hostData.uid,
+                displayName: hostData.displayName,
+                photoURL: hostData.photoURL,
+                email: hostData.email || ''
+            };
+            console.log('Host found:', opponentData);
+            updatePlayerInfo();
+            hideWaitingScreen();
+        }
+    }, (error) => {
+        console.error('Error listening for host:', error);
+    });
 }
 
 // ===========================
@@ -389,33 +464,3 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// ===========================
-// Simulate Opponent Join (for testing)
-// ===========================
-// In a real implementation, this would be handled by WebSocket/Firestore listeners
-// For now, we'll add a test button to simulate opponent joining
-window.simulateOpponentJoin = async function() {
-    if (gameMode === 'host') {
-        // Simulate opponent data
-        opponentData = {
-            displayName: 'Test Opponent',
-            email: 'opponent@test.com',
-            photoURL: ''
-        };
-        updatePlayerInfo();
-        hideWaitingScreen();
-    }
-};
-
-// Auto-join simulation for testing (remove in production)
-if (gameMode === 'join') {
-    setTimeout(() => {
-        opponentData = {
-            displayName: 'Test Host',
-            email: 'host@test.com',
-            photoURL: ''
-        };
-        updatePlayerInfo();
-        hideWaitingScreen();
-    }, 2000);
-}

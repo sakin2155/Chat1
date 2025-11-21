@@ -1170,10 +1170,11 @@ function createMessageElement(messageData) {
     const isOwnMessage = messageData.senderId === currentUser.uid;
     const isDeleted = !!messageData.isDeleted;
     const isSystemMessage = messageData.type === 'system';
+    const isGameInvite = messageData.type === 'game_invite';
     const isStickerOrGif = !isDeleted && (messageData.type === 'sticker' || messageData.type === 'gif');
 
     const div = document.createElement('div');
-    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}`;
+    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}`;
     div.dataset.messageId = messageData.id;
     // Store timestamp in milliseconds for proper sorting
     // Use server timestamp if available, otherwise use current time as fallback
@@ -1193,6 +1194,20 @@ function createMessageElement(messageData) {
         content = `<span class="system-message-text">${escapeHtml(messageData.text || '')}</span>`;
     } else if (isDeleted) {
         content = `<span class="message-deleted-text">This message was deleted</span>`;
+    } else if (isGameInvite) {
+        // Game invite card
+        const inviterName = messageData.invitedByName || 'Someone';
+        const roomId = messageData.roomId;
+        const gameType = messageData.gameType || 'tictactoe';
+        content = `
+            <div class="game-invite-card">
+                <div class="game-invite-header">🎮 Game Invite</div>
+                <div class="game-invite-text">${escapeHtml(inviterName)} challenged you to Tic-Tac-Toe!</div>
+                <button class="game-invite-btn" data-room-id="${roomId}" data-game-type="${gameType}">
+                    Tap to Play
+                </button>
+            </div>
+        `;
     } else if (isMediaMessage(messageData)) {
         const mediaClass = messageData.type === 'sticker' ? 'message-sticker' : 'message-image';
         const altLabel = getMediaAltText(messageData.type);
@@ -1406,6 +1421,20 @@ function createMessageElement(messageData) {
         if (isMediaMessage(messageData) && messageData.imgUrl) {
             const mediaEl = div.querySelector('.message-image, .message-sticker');
             mediaEl?.addEventListener('click', () => openImageViewer(messageData.imgUrl));
+        }
+
+        // Handle game invite button click
+        if (isGameInvite) {
+            const gameInviteBtn = div.querySelector('.game-invite-btn');
+            if (gameInviteBtn) {
+                gameInviteBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const roomId = gameInviteBtn.dataset.roomId;
+                    if (roomId) {
+                        window.location.href = `games.html?roomID=${roomId}&mode=join`;
+                    }
+                });
+            }
         }
     }
 
@@ -3069,6 +3098,53 @@ function updateStreakDisplay(chatId) {
 }
 
 // ===========================
+// Game Invites
+// ===========================
+function generateGameRoomId() {
+    return 'game_' + Math.random().toString(36).substr(2, 9);
+}
+
+async function handleGameInvite() {
+    if (!currentChatId || !currentChatUser) {
+        alert('Please select a user to challenge');
+        return;
+    }
+
+    try {
+        showLoading('Creating game invite...');
+        
+        // Generate unique room ID
+        const roomId = generateGameRoomId();
+        
+        // Create game invite message
+        const gameInviteMessage = {
+            text: `🎮 ${currentUserData?.displayName || 'Someone'} challenged you to Tic-Tac-Toe!`,
+            type: 'game_invite',
+            roomId: roomId,
+            gameType: 'tictactoe',
+            invitedBy: currentUser.uid,
+            invitedByName: currentUserData?.displayName || 'Unknown',
+            invitedByAvatar: currentUserData?.photoURL || '',
+            timestamp: serverTimestamp()
+        };
+
+        // Send the invite message
+        await addDoc(collection(db, 'chats', currentChatId, 'messages'), gameInviteMessage);
+
+        // Redirect host to game page
+        setTimeout(() => {
+            window.location.href = `games.html?roomID=${roomId}&mode=host`;
+        }, 500);
+
+        hideLoading();
+    } catch (error) {
+        hideLoading();
+        console.error('Error creating game invite:', error);
+        alert('Failed to create game invite. Please try again.');
+    }
+}
+
+// ===========================
 // Media Menu
 // ===========================
 if (mediaMenuBtn) {
@@ -3103,6 +3179,8 @@ if (mediaMenu) {
             openGifModal();
         } else if (action === 'sticker') {
             openStickerSheet();
+        } else if (action === 'game') {
+            handleGameInvite();
         }
     });
 }

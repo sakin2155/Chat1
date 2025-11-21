@@ -1199,10 +1199,19 @@ function createMessageElement(messageData) {
         const inviterName = messageData.invitedByName || 'Someone';
         const roomId = messageData.roomId;
         const gameType = messageData.gameType || 'tictactoe';
+        
+        // Determine game title and emoji
+        let gameTitle = 'Tic-Tac-Toe';
+        let gameEmoji = '⭕';
+        if (gameType === 'ludo') {
+            gameTitle = 'Ludo Duel';
+            gameEmoji = '🎲';
+        }
+        
         content = `
             <div class="game-invite-card">
-                <div class="game-invite-header">🎮 Game Invite</div>
-                <div class="game-invite-text">${escapeHtml(inviterName)} challenged you to Tic-Tac-Toe!</div>
+                <div class="game-invite-header">${gameEmoji} Game Invite</div>
+                <div class="game-invite-text">${escapeHtml(inviterName)} challenged you to ${gameTitle}!</div>
                 <button class="game-invite-btn" data-room-id="${roomId}" data-game-type="${gameType}">
                     Tap to Play
                 </button>
@@ -1430,8 +1439,12 @@ function createMessageElement(messageData) {
                 gameInviteBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     const roomId = gameInviteBtn.dataset.roomId;
+                    const gameType = gameInviteBtn.dataset.gameType || 'tictactoe';
+                    
                     if (roomId) {
-                        window.location.href = `games.html?roomID=${roomId}&mode=join`;
+                        // Determine which game file to use
+                        const gameFile = gameType === 'ludo' ? 'ludo.html' : 'games.html';
+                        window.location.href = `${gameFile}?roomId=${roomId}&mode=join`;
                     }
                 });
             }

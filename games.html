@@ -17,15 +17,17 @@
 
     <!-- Game Container -->
     <div id="game-container" class="game-container hidden">
-        <!-- Header -->
-        <div class="game-header">
-            <button id="back-to-chat-btn" class="back-btn" title="Back to Chat">← Back</button>
-            <h1>Tic-Tac-Toe</h1>
-            <div class="header-spacer"></div>
-        </div>
+        <!-- Main Game Section -->
+        <div class="game-main">
+            <!-- Header -->
+            <div class="game-header">
+                <button id="back-to-chat-btn" class="back-btn" title="Back to Chat">← Back</button>
+                <h1>Tic-Tac-Toe</h1>
+                <div class="header-spacer"></div>
+            </div>
 
-        <!-- Status Board -->
-        <div class="status-board">
+            <!-- Status Board -->
+            <div class="status-board">
             <div class="player-info player-x">
                 <div class="player-avatar" id="player-x-avatar">?</div>
                 <div class="player-details">
@@ -70,6 +72,30 @@
                 <button class="board-cell" data-index="8"></button>
             </div>
             <div class="turn-indicator" id="turn-indicator">Your Turn</div>
+            
+            <!-- Game Controls -->
+            <div class="game-controls">
+                <button id="give-turn-btn" class="control-btn" title="Give first turn to opponent">
+                    🔄 Give Turn
+                </button>
+            </div>
+        </div>
+
+        <!-- In-Game Chat Section -->
+        <div class="game-chat">
+            <div class="chat-header">💬 Chat</div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input 
+                    type="text" 
+                    id="chat-input" 
+                    class="chat-input" 
+                    placeholder="Type a message..."
+                    maxlength="100"
+                >
+                <button id="send-chat-btn" class="send-btn">Send</button>
+            </div>
+        </div>
         </div>
 
         <!-- Game Over Modal -->

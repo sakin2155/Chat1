@@ -78,6 +78,10 @@ const playerXStatus = document.getElementById('player-x-status');
 const playerOAvatar = document.getElementById('player-o-avatar');
 const playerOName = document.getElementById('player-o-name');
 const playerOStatus = document.getElementById('player-o-status');
+const giveTurnBtn = document.getElementById('give-turn-btn');
+const chatInput = document.getElementById('chat-input');
+const sendChatBtn = document.getElementById('send-chat-btn');
+const chatMessages = document.getElementById('chat-messages');
 
 // ===========================
 // Utility Functions
@@ -407,6 +411,9 @@ async function initializeGame() {
     // Set up real-time move synchronization
     listenForMoves();
     
+    // Set up in-game chat
+    listenForChatMessages();
+    
     initializeSocket();
 }
 
@@ -562,6 +569,76 @@ async function saveGameState() {
 }
 
 // ===========================
+// In-Game Chat Functions
+// ===========================
+async function sendChatMessage(text) {
+    if (!text.trim()) return;
+    
+    try {
+        await addDoc(collection(db, 'games', roomId, 'chat'), {
+            senderId: currentUser.uid,
+            senderName: currentUserData?.displayName || 'Player',
+            message: text.trim(),
+            timestamp: new Date()
+        });
+        console.log('Chat message sent');
+    } catch (error) {
+        console.error('Error sending chat message:', error);
+    }
+}
+
+function displayChatMessage(data, isOwn = false) {
+    const messageEl = document.createElement('div');
+    messageEl.className = `chat-message ${isOwn ? 'own' : 'opponent'}`;
+    messageEl.textContent = data.message;
+    messageEl.title = `${data.senderName} - ${new Date(data.timestamp?.toDate?.() || data.timestamp).toLocaleTimeString()}`;
+    chatMessages.appendChild(messageEl);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function listenForChatMessages() {
+    console.log('Setting up listener for chat messages...');
+    const chatQuery = query(
+        collection(db, 'games', roomId, 'chat'),
+        orderBy('timestamp', 'asc')
+    );
+    
+    const unsubscribe = onSnapshot(chatQuery, (querySnap) => {
+        console.log('Chat listener triggered, count:', querySnap.docs.length);
+        
+        querySnap.docs.forEach((doc) => {
+            const data = doc.data();
+            const isOwn = data.senderId === currentUser.uid;
+            displayChatMessage(data, isOwn);
+        });
+    }, (error) => {
+        console.error('Error listening for chat messages:', error);
+    });
+}
+
+// ===========================
+// Turn Control Functions
+// ===========================
+async function giveTurnToOpponent() {
+    if (gameMode !== 'host') {
+        console.log('Only host can give turn');
+        return;
+    }
+    
+    // Switch the starting turn
+    currentTurn = 'O';
+    updateTurnIndicator();
+    
+    // Save the turn change
+    await saveGameState();
+    
+    // Send system message
+    await sendChatMessage(`🔄 ${currentUserData?.displayName || 'Host'} gave the first turn to opponent!`);
+    
+    console.log('Turn given to opponent');
+}
+
+// ===========================
 // Event Listeners
 // ===========================
 boardCells.forEach(cell => {
@@ -587,6 +664,32 @@ backToChatFromModalBtn.addEventListener('click', () => {
 
 goToLoginBtn.addEventListener('click', () => {
     window.location.href = 'index.html';
+});
+
+// Chat event listeners
+sendChatBtn.addEventListener('click', async () => {
+    const text = chatInput.value;
+    if (text.trim()) {
+        await sendChatMessage(text);
+        chatInput.value = '';
+        chatInput.focus();
+    }
+});
+
+chatInput.addEventListener('keypress', async (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const text = chatInput.value;
+        if (text.trim()) {
+            await sendChatMessage(text);
+            chatInput.value = '';
+        }
+    }
+});
+
+// Give turn button
+giveTurnBtn.addEventListener('click', async () => {
+    await giveTurnToOpponent();
 });
 
 // ===========================

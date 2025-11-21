@@ -2614,6 +2614,37 @@ function createEmojiStickerDataUrl(emoji) {
 }
 
 // ===========================
+// Mobile Keyboard Detection
+// ===========================
+// Detect when keyboard appears on mobile and scroll to bottom
+if (messageInput) {
+    messageInput.addEventListener('focus', () => {
+        // Scroll to bottom when input is focused (keyboard appears)
+        setTimeout(() => {
+            scrollToBottom(false);
+        }, 300); // Wait for keyboard animation
+    });
+
+    messageInput.addEventListener('input', () => {
+        // Also scroll when typing
+        scrollToBottom(false);
+    });
+}
+
+// Listen for window resize (keyboard show/hide on mobile)
+let lastWindowHeight = window.innerHeight;
+window.addEventListener('resize', () => {
+    const currentHeight = window.innerHeight;
+    // If height decreased, keyboard is showing
+    if (currentHeight < lastWindowHeight) {
+        setTimeout(() => {
+            scrollToBottom(false);
+        }, 100);
+    }
+    lastWindowHeight = currentHeight;
+});
+
+// ===========================
 // Send Message
 // ===========================
 sendBtn.addEventListener('click', sendMessage);

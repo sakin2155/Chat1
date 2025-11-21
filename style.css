@@ -1820,6 +1820,10 @@ body {
     position: relative;
     overflow: visible;
     flex-shrink: 0;
+    /* Ensure input stays visible when keyboard appears on mobile */
+    position: sticky;
+    bottom: 0;
+    z-index: 100;
 }
 
 .icon-btn {

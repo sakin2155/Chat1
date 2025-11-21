@@ -1136,6 +1136,9 @@ function createMessageElement(messageData) {
     const div = document.createElement('div');
     div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}`;
     div.dataset.messageId = messageData.id;
+    // Store timestamp in milliseconds for proper sorting
+    const timestamp = messageData.timestamp?.seconds ? messageData.timestamp.seconds * 1000 : 0;
+    div.dataset.timestamp = timestamp;
 
     let content = '';
     if (isSystemMessage) {
@@ -1387,7 +1390,27 @@ function appendMessage(messageData) {
     const messageEl = createMessageElement(messageData);
     // Use requestAnimationFrame to prevent layout thrashing
     requestAnimationFrame(() => {
-        messagesContainer.appendChild(messageEl);
+        // Insert message in correct chronological order based on timestamp
+        const existingMessages = messagesContainer.querySelectorAll('.message');
+        let inserted = false;
+        
+        for (let i = 0; i < existingMessages.length; i++) {
+            const existingMsg = existingMessages[i];
+            const existingTimestamp = parseInt(existingMsg.dataset.timestamp || '0');
+            const newTimestamp = messageData.timestamp?.seconds ? messageData.timestamp.seconds * 1000 : 0;
+            
+            if (newTimestamp < existingTimestamp) {
+                messagesContainer.insertBefore(messageEl, existingMsg);
+                inserted = true;
+                break;
+            }
+        }
+        
+        // If not inserted yet, append to end
+        if (!inserted) {
+            messagesContainer.appendChild(messageEl);
+        }
+        
         updateMessageStatusVisibility();
         // Auto-scroll to bottom when new message is added
         scrollToBottom(true);

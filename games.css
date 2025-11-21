@@ -97,12 +97,13 @@ body {
 .game-header {
     background: #161b22;
     color: white;
-    padding: 15px 20px;
+    padding: 12px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 15px;
     border-bottom: 1px solid #30363d;
+    flex-shrink: 0;
 }
 
 .game-header h1 {
@@ -139,14 +140,14 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 15px 20px;
+    padding: 8px 15px;
     background: #0d1117;
     border-bottom: 1px solid #30363d;
-    gap: 10px;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .player-info {
-    flex: 1;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -156,6 +157,7 @@ body {
     border: 1px solid #30363d;
     transition: transform 0.3s ease;
     min-width: 0;
+    width: 100%;
 }
 
 .player-info.active {
@@ -169,6 +171,8 @@ body {
     height: 45px;
     border-radius: 50%;
     background: linear-gradient(135deg, #1f6feb 0%, #58a6ff 100%);
+    background-size: cover;
+    background-position: center;
     color: white;
     display: flex;
     align-items: center;
@@ -178,8 +182,14 @@ body {
     flex-shrink: 0;
 }
 
+.player-avatar.has-image {
+    color: transparent;
+    font-size: 0;
+}
+
 .player-details {
     flex: 1;
+    min-width: 0;
 }
 
 .player-name {
@@ -197,7 +207,9 @@ body {
 .player-status {
     font-size: 11px;
     color: #8b949e;
-    margin-top: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .vs-divider {
@@ -255,14 +267,15 @@ body {
    Game Board
    =========================== */
 .game-board {
-    padding: 20px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 15px;
-    overflow-y: auto;
+    gap: 8px;
+    overflow: hidden;
     flex: 1;
     max-width: 100%;
+    justify-content: center;
 }
 
 .game-board.hidden {
@@ -272,24 +285,27 @@ body {
 .board-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: 6px;
     background: #0d1117;
-    padding: 8px;
+    padding: 6px;
     border-radius: 8px;
     border: 1px solid #30363d;
 }
 
 .board-cell {
-    width: 80px;
-    height: 80px;
+    width: 65px;
+    height: 65px;
     background: #161b22;
     border: 1px solid #30363d;
     border-radius: 6px;
-    font-size: 32px;
+    font-size: 26px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.3s ease;
     color: #58a6ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .board-cell:hover:not(:disabled) {
@@ -312,10 +328,10 @@ body {
 }
 
 .turn-indicator {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     color: #c9d1d9;
-    padding: 8px 16px;
+    padding: 6px 12px;
     background: #161b22;
     border: 1px solid #30363d;
     border-radius: 6px;
@@ -532,12 +548,13 @@ button {
    =========================== */
 .game-chat {
     width: 100%;
-    height: 40vh;
+    height: 38vh;
     background: #0d1117;
     border-top: 1px solid #30363d;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    flex-shrink: 0;
 }
 
 .chat-header {
@@ -736,20 +753,20 @@ button {
     }
     
     .board-cell {
-        width: 60px;
-        height: 60px;
-        font-size: 24px;
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
     }
     
     .board-grid {
-        gap: 6px;
-        padding: 6px;
+        gap: 5px;
+        padding: 5px;
     }
     
     .game-board {
-        padding: 15px 10px;
-        gap: 15px;
-        overflow-y: auto;
+        padding: 8px;
+        gap: 6px;
+        overflow: hidden;
     }
     
     .game-controls {
@@ -763,7 +780,7 @@ button {
     }
     
     .game-chat {
-        height: 35vh;
+        height: 32vh;
     }
     
     .chat-header {

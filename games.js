@@ -280,7 +280,16 @@ async function resetBoard() {
     }
     
     // Save reset game state to Firestore
-    await saveGameState();
+    await setDoc(doc(db, 'games', roomId), {
+        gameState: gameState,
+        currentTurn: currentTurn,
+        gameOver: gameOver,
+        winner: null,
+        hostId: gameMode === 'host' ? currentUser.uid : null,
+        updatedAt: new Date()
+    }, { merge: true });
+    
+    console.log('Game reset and saved to Firestore');
 }
 
 function showGameOverModal(result) {
@@ -292,6 +301,16 @@ function showGameOverModal(result) {
         gameOverMessage.textContent = `😢 ${opponentData?.displayName || 'Opponent'} Won!`;
     }
     gameOverModal.classList.remove('hidden');
+    
+    // Auto-restart after 5 seconds
+    setTimeout(() => {
+        if (!gameOverModal.classList.contains('hidden')) {
+            resetBoard().then(() => {
+                closeGameOverModal();
+                console.log('Game auto-restarted');
+            });
+        }
+    }, 5000);
 }
 
 function closeGameOverModal() {

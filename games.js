@@ -299,10 +299,12 @@ function showWaitingScreen() {
 }
 
 function hideWaitingScreen() {
+    console.log('Hiding waiting screen, showing game board');
     waitingScreen.classList.add('hidden');
     gameBoard.classList.remove('hidden');
     gameActive = true;
     updateTurnIndicator();
+    console.log('Game board should now be visible');
 }
 
 // ===========================
@@ -313,24 +315,30 @@ async function initializeGame() {
     roomId = params.roomId;
     gameMode = params.mode;
 
+    console.log('Initializing game with roomId:', roomId, 'mode:', gameMode);
+
     if (!roomId || !gameMode) {
         console.error('Invalid game parameters');
         return;
     }
 
     if (gameMode === 'host') {
+        console.log('Host mode - registering as host');
         playerSymbol = 'X';
         opponentSymbol = 'O';
         showWaitingScreen();
         
         // Register host in Firestore
         try {
-            await setDoc(doc(db, 'games', roomId, 'players', 'host'), {
+            const hostData = {
                 uid: currentUser.uid,
                 displayName: currentUserData?.displayName || 'Host',
                 photoURL: currentUserData?.photoURL || '',
                 joinedAt: new Date()
-            });
+            };
+            console.log('Registering host with data:', hostData);
+            await setDoc(doc(db, 'games', roomId, 'players', 'host'), hostData);
+            console.log('Host registered successfully');
         } catch (error) {
             console.error('Error registering host:', error);
         }
@@ -338,18 +346,22 @@ async function initializeGame() {
         // Listen for guest joining
         listenForGuestJoin();
     } else if (gameMode === 'join') {
+        console.log('Join mode - registering as guest');
         playerSymbol = 'O';
         opponentSymbol = 'X';
         showWaitingScreen();
         
         // Register guest in Firestore
         try {
-            await setDoc(doc(db, 'games', roomId, 'players', 'guest'), {
+            const guestData = {
                 uid: currentUser.uid,
                 displayName: currentUserData?.displayName || 'Guest',
                 photoURL: currentUserData?.photoURL || '',
                 joinedAt: new Date()
-            });
+            };
+            console.log('Registering guest with data:', guestData);
+            await setDoc(doc(db, 'games', roomId, 'players', 'guest'), guestData);
+            console.log('Guest registered successfully');
         } catch (error) {
             console.error('Error registering guest:', error);
         }
@@ -367,18 +379,23 @@ async function initializeGame() {
 // ===========================
 function listenForGuestJoin() {
     // Host listens for guest joining
+    console.log('Host setting up listener for guest join...');
     const unsubscribe = onSnapshot(doc(db, 'games', roomId, 'players', 'guest'), (docSnap) => {
+        console.log('Guest listener triggered. Exists:', docSnap.exists());
         if (docSnap.exists()) {
             const guestData = docSnap.data();
+            console.log('Guest data from Firestore:', guestData);
             opponentData = {
                 uid: guestData.uid,
                 displayName: guestData.displayName,
                 photoURL: guestData.photoURL,
                 email: guestData.email || ''
             };
-            console.log('Guest joined:', opponentData);
+            console.log('Guest joined, opponent data set:', opponentData);
             updatePlayerInfo();
             hideWaitingScreen();
+        } else {
+            console.log('Guest document does not exist yet');
         }
     }, (error) => {
         console.error('Error listening for guest:', error);
@@ -387,18 +404,23 @@ function listenForGuestJoin() {
 
 function listenForHostPresence() {
     // Guest listens for host presence
+    console.log('Guest setting up listener for host presence...');
     const unsubscribe = onSnapshot(doc(db, 'games', roomId, 'players', 'host'), (docSnap) => {
+        console.log('Host listener triggered. Exists:', docSnap.exists());
         if (docSnap.exists()) {
             const hostData = docSnap.data();
+            console.log('Host data from Firestore:', hostData);
             opponentData = {
                 uid: hostData.uid,
                 displayName: hostData.displayName,
                 photoURL: hostData.photoURL,
                 email: hostData.email || ''
             };
-            console.log('Host found:', opponentData);
+            console.log('Host found, opponent data set:', opponentData);
             updatePlayerInfo();
             hideWaitingScreen();
+        } else {
+            console.log('Host document does not exist yet');
         }
     }, (error) => {
         console.error('Error listening for host:', error);

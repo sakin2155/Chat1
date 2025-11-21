@@ -910,6 +910,7 @@ function createUserItem(userData) {
         <div class="user-avatar-container">
             <div class="user-avatar">${getInitials(userData.displayName || userData.email || '')}</div>
             ${displayStatus === 'online' ? '<div class="online-indicator"></div>' : ''}
+            <div class="unread-badge hidden" data-count="0">0</div>
         </div>
         <div class="user-info">
             <div class="user-name">${displayName}</div>
@@ -925,6 +926,9 @@ function createUserItem(userData) {
 
     // Load and listen to latest message preview
     loadLatestMessagePreview(userData.uid, div);
+    
+    // Load and listen to unread message count
+    listenToUnreadCount(userData.uid, div);
 
     return div;
 }
@@ -950,7 +954,7 @@ function updateUserStatus(userData) {
 
     // Update chat header if this is the current chat user
     if (currentChatUser && currentChatUser.uid === userData.uid) {
-        document.getElementById('chat-user-status').textContent = displayStatus;
+        document.getElementById('chat-user-status').textContent = getChatHeaderStatus(userData);
         applyAvatarToElement(document.getElementById('chat-user-avatar'), userData.photoURL, userData.displayName || userData.email);
     }
 }
@@ -992,7 +996,11 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
         } else {
             const latestMessage = snapshot.docs[0].data();
             const previewText = getMessagePreviewText(latestMessage);
-            previewEl.textContent = previewText;
+            
+            // Add "You: " prefix if current user sent the message
+            const isCurrentUserSender = latestMessage.senderId === currentUser.uid;
+            const displayText = isCurrentUserSender ? `You: ${previewText}` : previewText;
+            previewEl.textContent = displayText;
 
             // Add unread indicator if message is not seen and not from current user
             if (!latestMessage.seen && latestMessage.senderId !== currentUser.uid) {
@@ -1000,6 +1008,36 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
             } else {
                 previewEl.classList.remove('unread');
             }
+        }
+    });
+
+    // Store unsubscribe function for cleanup if needed
+    if (!userItemEl._unsubscribes) {
+        userItemEl._unsubscribes = [];
+    }
+    userItemEl._unsubscribes.push(unsubscribe);
+}
+
+function listenToUnreadCount(otherUserId, userItemEl) {
+    const chatId = getChatId(currentUser.uid, otherUserId);
+    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    // Query for unseen messages from the other user
+    const q = query(messagesRef, where('senderId', '==', otherUserId), where('seen', '==', false));
+
+    // Listen for real-time updates
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const badgeEl = userItemEl.querySelector('.unread-badge');
+        if (!badgeEl) return;
+
+        const unreadCount = snapshot.size;
+        
+        if (unreadCount > 0) {
+            badgeEl.textContent = unreadCount > 9 ? '9+' : unreadCount;
+            badgeEl.dataset.count = unreadCount;
+            badgeEl.classList.remove('hidden');
+        } else {
+            badgeEl.classList.add('hidden');
+            badgeEl.dataset.count = '0';
         }
     });
 
@@ -1021,7 +1059,7 @@ async function openChat(userData) {
     const nickname = userNicknames.get(userData.uid);
     const displayName = nickname || userData.displayName;
     document.getElementById('chat-user-name').textContent = displayName;
-    document.getElementById('chat-user-status').textContent = getDisplayStatus(userData);
+    document.getElementById('chat-user-status').textContent = getChatHeaderStatus(userData);
     applyAvatarToElement(document.getElementById('chat-user-avatar'), userData.photoURL, userData.displayName || userData.email);
 
     // Mobile: show chat window
@@ -1544,6 +1582,47 @@ function getDisplayStatus(userData) {
         return isRecentlyActive ? 'online' : 'offline';
     }
     return userData.status === 'online' ? 'online' : 'offline';
+}
+
+function getChatHeaderStatus(userData) {
+    if (!userData) return 'offline';
+    
+    const lastActive = userData.lastActive?.toDate
+        ? userData.lastActive.toDate()
+        : userData.lastActive
+            ? new Date(userData.lastActive)
+            : null;
+    
+    // Check if user is currently online
+    if (lastActive) {
+        const isRecentlyActive = (Date.now() - lastActive.getTime()) < PRESENCE_TIMEOUT;
+        if (isRecentlyActive) {
+            return 'Online';
+        }
+    } else if (userData.status === 'online') {
+        return 'Online';
+    }
+    
+    // User is offline - show relative time
+    if (lastActive) {
+        const now = new Date();
+        const diff = now - lastActive;
+        
+        if (diff < 60000) return 'Active just now';
+        if (diff < 3600000) return `Active ${Math.floor(diff / 60000)}m ago`;
+        if (diff < 86400000) {
+            const hours = Math.floor(diff / 3600000);
+            return `Active ${hours}h ago`;
+        }
+        if (diff < 604800000) {
+            const days = Math.floor(diff / 86400000);
+            return days === 1 ? 'Active yesterday' : `Active ${days}d ago`;
+        }
+        // For older timestamps, show the date
+        return `Active ${lastActive.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    }
+    
+    return 'offline';
 }
 
 function renderCurrentUserProfile() {
@@ -3483,7 +3562,7 @@ function listenForTyping() {
 let markSeenTimeout = null;
 
 async function markMessagesAsSeen() {
-    if (!currentChatId || !currentChatUser) return;
+    if (!currentChatId || !currentChatUser || !messagesContainer) return;
 
     // Debounce to prevent excessive calls
     if (markSeenTimeout) {
@@ -3492,6 +3571,12 @@ async function markMessagesAsSeen() {
 
     markSeenTimeout = setTimeout(async () => {
         try {
+            // Check if user is at the bottom of the message list (viewing recent messages)
+            const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 100;
+            
+            // Only mark messages as seen if user is at the bottom (viewing recent messages)
+            if (!isAtBottom) return;
+
             const messagesRef = collection(db, 'chats', currentChatId, 'messages');
             const q = query(messagesRef, where('senderId', '==', currentChatUser.uid), where('seen', '==', false));
             const snapshot = await getDocs(q);

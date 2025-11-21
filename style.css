@@ -878,6 +878,146 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Clear Chats Section */
+.clear-chats-section {
+    padding: 16px;
+    background: rgba(255, 59, 48, 0.08);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 59, 48, 0.2);
+}
+
+.clear-chats-section h3 {
+    margin: 0 0 8px 0;
+    color: #ff3b30;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.clear-chats-warning {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.4;
+}
+
+#clear-all-chats-btn {
+    width: 100%;
+    padding: 12px 16px;
+    background: #ff3b30;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#clear-all-chats-btn:hover {
+    background: #ff2d20;
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+}
+
+#clear-all-chats-btn:active {
+    transform: scale(0.98);
+}
+
+/* Confirmation Modal */
+.confirmation-modal {
+    max-width: 400px;
+    text-align: center;
+}
+
+.confirmation-modal h2 {
+    margin: 0 0 16px 0;
+    color: #ff3b30;
+    font-size: 20px;
+}
+
+.confirmation-warning {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.5;
+}
+
+.confirmation-message {
+    margin: 0 0 20px 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.confirmation-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.confirmation-actions button {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.confirmation-actions .secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.confirmation-actions .secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.confirmation-actions .danger {
+    background: #ff3b30;
+    color: white;
+}
+
+.confirmation-actions .danger:hover {
+    background: #ff2d20;
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+}
+
+.confirmation-actions .danger:active {
+    transform: scale(0.98);
+}
+
+/* Notification Toast */
+.notification-toast {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 16px 24px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    z-index: 10000;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    animation: slideIn 0.3s ease-out;
+}
+
+.notification-toast.hidden {
+    display: none;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
 .danger-text {
     color: #ff3b30 !important;
 }

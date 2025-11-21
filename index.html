@@ -328,6 +328,24 @@
         </div>
     </div>
 
+    <!-- Clear Chat Confirmation Modal -->
+    <div id="clear-chat-confirmation-modal" class="modal hidden">
+        <div class="modal-content confirmation-modal">
+            <h2>Clear All Messages?</h2>
+            <p class="confirmation-warning">⚠️ This will permanently delete all messages in this chat from the database for both users.</p>
+            <p class="confirmation-message">This action cannot be undone.</p>
+            <div class="confirmation-actions">
+                <button id="confirm-clear-cancel-btn" class="secondary">Cancel</button>
+                <button id="confirm-clear-btn" class="danger">Clear All Messages</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Notification Toast -->
+    <div id="success-notification" class="notification-toast hidden">
+        <span id="notification-message">✅ Success!</span>
+    </div>
+
     <!-- Chat Settings Modal -->
     <div id="chat-settings-modal" class="modal hidden">
         <div class="modal-content chat-settings-modal">
@@ -387,6 +405,14 @@
                         <button id="reset-theme-btn" class="secondary">Reset to Default</button>
                         <button id="apply-theme-btn">Apply Theme</button>
                     </div>
+                </div>
+
+                <!-- Clear Chats Section -->
+                <hr class="settings-divider">
+                <div class="clear-chats-section">
+                    <h3>Clear Chat</h3>
+                    <p class="clear-chats-warning">⚠️ This will permanently delete all messages in this chat from the database for both users. This action cannot be undone.</p>
+                    <button id="clear-all-chats-btn" class="danger">Clear All Messages</button>
                 </div>
             </div>
         </div>

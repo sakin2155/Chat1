@@ -126,6 +126,20 @@ function scrollMessagesToBottom() {
 }
 
 // ===========================
+// Notification Helper
+// ===========================
+function showNotification(message, duration = 3000) {
+    if (!successNotification || !notificationMessage) return;
+    notificationMessage.textContent = message;
+    successNotification.classList.remove('hidden');
+    
+    // Auto-hide after duration
+    setTimeout(() => {
+        successNotification.classList.add('hidden');
+    }, duration);
+}
+
+// ===========================
 // DOM Elements
 // ===========================
 const globalLoading = document.getElementById('global-loading');
@@ -195,6 +209,12 @@ const bgImageBtn = document.getElementById('bg-image-btn');
 const removeBgImageBtn = document.getElementById('remove-bg-image-btn');
 const applyThemeBtn = document.getElementById('apply-theme-btn');
 const resetThemeBtn = document.getElementById('reset-theme-btn');
+const clearAllChatsBtn = document.getElementById('clear-all-chats-btn');
+const clearChatConfirmationModal = document.getElementById('clear-chat-confirmation-modal');
+const confirmClearBtn = document.getElementById('confirm-clear-btn');
+const confirmClearCancelBtn = document.getElementById('confirm-clear-cancel-btn');
+const successNotification = document.getElementById('success-notification');
+const notificationMessage = document.getElementById('notification-message');
 const storyStrip = document.getElementById('story-strip');
 const storyListEl = document.getElementById('story-list');
 const addStoryBtn = document.getElementById('add-story-btn');
@@ -317,6 +337,22 @@ if (saveNicknameBtn) {
 }
 if (removeNicknameBtn) {
     removeNicknameBtn.addEventListener('click', removeNickname);
+}
+if (clearAllChatsBtn) {
+    clearAllChatsBtn.addEventListener('click', showClearChatConfirmation);
+}
+if (confirmClearBtn) {
+    confirmClearBtn.addEventListener('click', confirmClearAllChats);
+}
+if (confirmClearCancelBtn) {
+    confirmClearCancelBtn.addEventListener('click', closeClearChatConfirmation);
+}
+if (clearChatConfirmationModal) {
+    clearChatConfirmationModal.addEventListener('click', (e) => {
+        if (e.target === clearChatConfirmationModal) {
+            closeClearChatConfirmation();
+        }
+    });
 }
 if (chatSettingsModal) {
     chatSettingsModal.addEventListener('click', (e) => {
@@ -2495,6 +2531,59 @@ async function resetTheme() {
 
     // Apply default theme
     applyThemeToChat(defaultTheme);
+}
+
+function showClearChatConfirmation() {
+    if (!currentChatId) return;
+    // Show custom confirmation modal
+    clearChatConfirmationModal.classList.remove('hidden');
+}
+
+function closeClearChatConfirmation() {
+    clearChatConfirmationModal.classList.add('hidden');
+}
+
+async function confirmClearAllChats() {
+    if (!currentChatId) return;
+
+    try {
+        // Close confirmation modal
+        closeClearChatConfirmation();
+
+        // Show loading state
+        clearAllChatsBtn.disabled = true;
+        clearAllChatsBtn.textContent = 'Clearing...';
+
+        // Get all messages in the chat
+        const messagesRef = collection(db, 'chats', currentChatId, 'messages');
+        const snapshot = await getDocs(messagesRef);
+
+        // Delete each message
+        let deletedCount = 0;
+        for (const doc of snapshot.docs) {
+            await deleteDoc(doc.ref);
+            deletedCount++;
+        }
+
+        console.log(`Deleted ${deletedCount} messages from chat ${currentChatId}`);
+
+        // Clear local messages container
+        messagesContainer.innerHTML = '';
+
+        // Show success notification in UI
+        showNotification(`✅ Successfully deleted ${deletedCount} messages from the database!`, 3000);
+
+        // Close settings modal after a short delay
+        setTimeout(() => {
+            closeChatSettingsModal();
+        }, 500);
+    } catch (error) {
+        console.error('Error clearing chats:', error);
+        showNotification('❌ Failed to clear messages. Please try again.', 3000);
+    } finally {
+        clearAllChatsBtn.disabled = false;
+        clearAllChatsBtn.textContent = 'Clear All Messages';
+    }
 }
 
 function applyThemeToChat(theme) {

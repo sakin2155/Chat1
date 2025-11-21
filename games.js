@@ -411,6 +411,9 @@ async function initializeGame() {
     // Set up real-time move synchronization
     listenForMoves();
     
+    // Set up game state change listener (for turn changes)
+    listenForGameStateChanges();
+    
     // Set up in-game chat
     listenForChatMessages();
     
@@ -518,6 +521,26 @@ function listenForMoves() {
     });
 }
 
+// Listen for game state changes (turn changes, etc.)
+function listenForGameStateChanges() {
+    console.log('Setting up listener for game state changes...');
+    const unsubscribe = onSnapshot(doc(db, 'games', roomId), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            console.log('Game state changed:', data);
+            
+            // Update turn if it changed
+            if (data.currentTurn && data.currentTurn !== currentTurn) {
+                console.log('Turn changed to:', data.currentTurn);
+                currentTurn = data.currentTurn;
+                updateTurnIndicator();
+            }
+        }
+    }, (error) => {
+        console.error('Error listening for game state changes:', error);
+    });
+}
+
 // ===========================
 // Game State Persistence
 // ===========================
@@ -587,13 +610,26 @@ async function sendChatMessage(text) {
     }
 }
 
-function displayChatMessage(data, isOwn = false) {
+let displayedMessages = new Set();
+
+function displayChatMessage(data, docId, isOwn = false) {
+    // Prevent duplicate messages
+    if (displayedMessages.has(docId)) return;
+    displayedMessages.add(docId);
+    
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${isOwn ? 'own' : 'opponent'}`;
     messageEl.textContent = data.message;
     messageEl.title = `${data.senderName} - ${new Date(data.timestamp?.toDate?.() || data.timestamp).toLocaleTimeString()}`;
-    chatMessages.appendChild(messageEl);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    messageEl.dataset.messageId = docId;
+    
+    if (chatMessages) {
+        chatMessages.appendChild(messageEl);
+        // Auto-scroll to bottom
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 0);
+    }
 }
 
 function listenForChatMessages() {
@@ -609,7 +645,7 @@ function listenForChatMessages() {
         querySnap.docs.forEach((doc) => {
             const data = doc.data();
             const isOwn = data.senderId === currentUser.uid;
-            displayChatMessage(data, isOwn);
+            displayChatMessage(data, doc.id, isOwn);
         });
     }, (error) => {
         console.error('Error listening for chat messages:', error);
@@ -625,17 +661,28 @@ async function giveTurnToOpponent() {
         return;
     }
     
-    // Switch the starting turn
-    currentTurn = 'O';
-    updateTurnIndicator();
-    
-    // Save the turn change
-    await saveGameState();
-    
-    // Send system message
-    await sendChatMessage(`🔄 ${currentUserData?.displayName || 'Host'} gave the first turn to opponent!`);
-    
-    console.log('Turn given to opponent');
+    try {
+        // Switch the starting turn
+        currentTurn = 'O';
+        updateTurnIndicator();
+        
+        // Save the turn change to Firestore
+        await setDoc(doc(db, 'games', roomId), {
+            gameState: gameState,
+            currentTurn: currentTurn,
+            gameOver: gameOver,
+            winner: checkWinner(gameState),
+            hostId: currentUser.uid,
+            updatedAt: new Date()
+        }, { merge: true });
+        
+        console.log('Turn given to opponent, saved to Firestore');
+        
+        // Send system message
+        await sendChatMessage(`🔄 ${currentUserData?.displayName || 'Host'} gave the first turn to opponent!`);
+    } catch (error) {
+        console.error('Error giving turn to opponent:', error);
+    }
 }
 
 // ===========================

@@ -53,6 +53,10 @@ service cloud.firestore {
       match /moves/{moveId} {
         allow read, write: if request.auth != null;
       }
+      
+      match /chat/{messageId} {
+        allow read, write: if request.auth != null;
+      }
     }
   }
 }
@@ -85,6 +89,11 @@ service cloud.firestore {
 - ✅ Stores game moves for history
 - ✅ Both players can read and write moves
 - ✅ Real-time sync of moves between players
+
+### Chat Subcollection
+- ✅ Stores in-game chat messages
+- ✅ Both players can read and write messages
+- ✅ Real-time sync of chat between players
 
 ## Testing the Rules
 
@@ -152,6 +161,12 @@ games/
         symbol: "X"
         timestamp: timestamp
         playerId: "user123"
+    chat/
+      {messageId}/
+        senderId: "user123"
+        senderName: "John"
+        message: "Hello!"
+        timestamp: timestamp
 ```
 
 ## Important Notes

@@ -114,10 +114,10 @@ function getInitials(name) {
 
 function applyAvatarToElement(element, userData) {
     if (!element || !userData) return;
-    
+
     const initials = getInitials(userData.displayName || userData.email || '?');
     element.textContent = initials;
-    
+
     if (userData.photoURL && userData.photoURL.startsWith('http')) {
         element.style.backgroundImage = `url(${userData.photoURL})`;
         element.classList.add('has-image');
@@ -134,7 +134,7 @@ async function applyTheme() {
         if (themeDoc.exists()) {
             const theme = themeDoc.data();
             const root = document.documentElement;
-            
+
             if (theme.sentBubbleColor) {
                 root.style.setProperty('--message-own-bg', theme.sentBubbleColor);
             }
@@ -147,7 +147,7 @@ async function applyTheme() {
             if (theme.secondaryColor) {
                 root.style.setProperty('--secondary-color', theme.secondaryColor);
             }
-            
+
             console.log('Theme applied:', theme);
         }
     } catch (error) {
@@ -172,7 +172,7 @@ function getUrlParams() {
 // ===========================
 function determineWinner(choice1, choice2) {
     if (choice1 === choice2) return 'draw';
-    
+
     if (choice1 === 'rock') {
         return choice2 === 'scissors' ? 'player1' : 'player2';
     } else if (choice1 === 'paper') {
@@ -202,7 +202,7 @@ function updatePlayerInfo() {
     if (playerNumber === 1) {
         applyAvatarToElement(player1Avatar, currentUserData);
         player1Name.textContent = currentUserData?.displayName || 'You';
-        
+
         if (opponentData) {
             applyAvatarToElement(player2Avatar, opponentData);
             player2Name.textContent = opponentData.displayName || 'Opponent';
@@ -210,7 +210,7 @@ function updatePlayerInfo() {
     } else {
         applyAvatarToElement(player2Avatar, currentUserData);
         player2Name.textContent = currentUserData?.displayName || 'You';
-        
+
         if (opponentData) {
             applyAvatarToElement(player1Avatar, opponentData);
             player1Name.textContent = opponentData.displayName || 'Opponent';
@@ -236,12 +236,12 @@ function resetRound() {
         player2Choice: null,
         result: null
     };
-    
+
     // Enable all choice buttons
     choiceBtns.forEach(btn => {
         btn.disabled = false;
     });
-    
+
     resultDisplay.classList.add('hidden');
     statusText.textContent = 'Make your choice!';
 }
@@ -267,7 +267,7 @@ async function initializeGame() {
         console.error('Invalid game parameters');
         return;
     }
-    
+
     // Apply theme if chatId is available
     if (currentChatId) {
         await applyTheme();
@@ -277,7 +277,7 @@ async function initializeGame() {
         console.log('Host mode - registering as player 1');
         playerNumber = 1;
         showWaitingScreen();
-        
+
         // Register player 1 in Firestore
         try {
             const player1Data = {
@@ -292,14 +292,14 @@ async function initializeGame() {
         } catch (error) {
             console.error('Error registering player 1:', error);
         }
-        
+
         // Listen for player 2 joining
         listenForPlayer2Join();
     } else if (gameMode === 'join') {
         console.log('Join mode - registering as player 2');
         playerNumber = 2;
         showWaitingScreen();
-        
+
         // Register player 2 in Firestore
         try {
             const player2Data = {
@@ -314,7 +314,7 @@ async function initializeGame() {
         } catch (error) {
             console.error('Error registering player 2:', error);
         }
-        
+
         // Listen for player 1 presence
         listenForPlayer1Presence();
     }
@@ -381,11 +381,11 @@ function listenForPlayer1Presence() {
 // ===========================
 async function submitChoice(choice) {
     console.log(`Player ${playerNumber} chose: ${choice}`);
-    
+
     // Disable all buttons
     choiceBtns.forEach(btn => btn.disabled = true);
     statusText.textContent = 'Waiting for opponent...';
-    
+
     // Submit choice to Firestore
     try {
         const choiceKey = playerNumber === 1 ? 'player1Choice' : 'player2Choice';
@@ -405,14 +405,18 @@ function listenForRoundUpdates() {
         if (docSnap.exists()) {
             const roundData = docSnap.data();
             console.log('Round data updated:', roundData);
-            
+
             const player1Choice = roundData.player1Choice;
             const player2Choice = roundData.player2Choice;
-            
+
             // Both players have made their choice
             if (player1Choice && player2Choice) {
                 const result = determineWinner(player1Choice, player2Choice);
                 displayResult(player1Choice, player2Choice, result);
+            } else if (player1Choice === null && player2Choice === null) {
+                // Round has been reset
+                console.log('Round reset detected from Firestore');
+                resetRound();
             }
         }
     }, (error) => {
@@ -422,17 +426,17 @@ function listenForRoundUpdates() {
 
 function displayResult(player1Choice, player2Choice, result) {
     console.log('Displaying result:', result);
-    
+
     resultDisplay.classList.remove('hidden');
-    
+
     // Show choices
     yourChoice.textContent = playerNumber === 1 ? getChoiceLabel(player1Choice) : getChoiceLabel(player2Choice);
     opponentChoice.textContent = playerNumber === 1 ? getChoiceLabel(player2Choice) : getChoiceLabel(player1Choice);
-    
+
     // Determine result for current player
     let resultText = '';
     let resultClass = '';
-    
+
     if (result === 'draw') {
         resultText = "It's a Draw!";
         resultClass = 'draw';
@@ -446,17 +450,17 @@ function displayResult(player1Choice, player2Choice, result) {
         resultClass = 'loss';
         sessionStats.losses++;
     }
-    
+
     resultMessage.textContent = resultText;
     resultMessage.className = `result-message ${resultClass}`;
-    
+
     updateScoreDisplay();
     statusText.textContent = resultText;
 }
 
 async function playAgain() {
     console.log('Starting new round...');
-    
+
     // Clear current round data for both players
     try {
         await setDoc(doc(db, 'rps_games', roomId, 'rounds', 'current'), {
@@ -469,7 +473,7 @@ async function playAgain() {
     } catch (error) {
         console.error('Error clearing round:', error);
     }
-    
+
     resetRound();
 }
 
@@ -482,12 +486,12 @@ function displayChatMessage(data, docId, isOwn = false) {
     // Prevent duplicate messages
     if (displayedChatMessages.has(docId)) return;
     displayedChatMessages.add(docId);
-    
+
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${isOwn ? 'own' : 'opponent'}`;
     messageEl.textContent = data.message;
     messageEl.dataset.messageId = docId;
-    
+
     if (chatMessages) {
         chatMessages.appendChild(messageEl);
         // Auto-scroll to bottom
@@ -502,17 +506,17 @@ async function sendChatMessage(text) {
         console.warn('Cannot send empty chat message');
         return;
     }
-    
+
     if (!roomId) {
         console.error('Cannot send chat message: roomId is not set');
         return;
     }
-    
+
     if (!currentUser) {
         console.error('Cannot send chat message: user not authenticated');
         return;
     }
-    
+
     try {
         console.log('Sending chat message to room:', roomId);
         console.log('Message data:', {
@@ -520,21 +524,21 @@ async function sendChatMessage(text) {
             senderName: currentUserData?.displayName || 'Player',
             message: text.trim()
         });
-        
+
         const docRef = await addDoc(collection(db, 'rps_games', roomId, 'chat'), {
             senderId: currentUser.uid,
             senderName: currentUserData?.displayName || 'Player',
             message: text.trim(),
             timestamp: serverTimestamp()
         });
-        
+
         console.log('Chat message sent successfully with ID:', docRef.id);
     } catch (error) {
         console.error('Error sending chat message:', error);
         console.error('Error code:', error.code);
         console.error('Error message:', error.message);
         console.error('Full error:', error);
-        
+
         // Provide specific error feedback
         if (error.code === 'permission-denied') {
             alert('Permission denied. Please ensure Firestore rules are updated.');
@@ -551,16 +555,16 @@ function listenForChatMessages() {
         console.error('Cannot listen for chat messages: roomId is not set');
         return;
     }
-    
+
     console.log('Setting up listener for chat messages in room:', roomId);
     const chatQuery = query(
         collection(db, 'rps_games', roomId, 'chat'),
         orderBy('timestamp', 'asc')
     );
-    
+
     const unsubscribe = onSnapshot(chatQuery, (querySnap) => {
         console.log('Chat listener triggered, count:', querySnap.docs.length);
-        
+
         querySnap.docs.forEach((doc) => {
             const data = doc.data();
             const isOwn = data.senderId === currentUser.uid;
@@ -577,10 +581,10 @@ function listenForChatMessages() {
 // ===========================
 async function leaveGame() {
     if (!gameSessionActive || !roomId) return;
-    
+
     console.log('Player leaving RPS game room:', roomId);
     gameSessionActive = false;
-    
+
     try {
         // Mark player as left in Firestore
         const playerKey = playerNumber === 1 ? 'player1' : 'player2';
@@ -588,7 +592,7 @@ async function leaveGame() {
             hasLeft: true,
             leftAt: serverTimestamp()
         }, { merge: true });
-        
+
         console.log('RPS player marked as left in Firestore');
     } catch (error) {
         console.error('Error marking RPS player as left:', error);
@@ -597,18 +601,18 @@ async function leaveGame() {
 
 function listenForOpponentLeft() {
     if (!roomId || playerNumber === null) return;
-    
+
     const opponentKey = playerNumber === 1 ? 'player2' : 'player1';
     console.log('Listening for RPS opponent left:', opponentKey);
-    
+
     opponentLeftListener = onSnapshot(doc(db, 'rps_games', roomId, 'players', opponentKey), (docSnap) => {
         if (docSnap.exists()) {
             const playerData = docSnap.data();
-            
+
             if (playerData.hasLeft && gameSessionActive) {
                 console.log('RPS opponent has left the game');
                 gameSessionActive = false;
-                
+
                 // Show notification
                 const opponentName = opponentData?.displayName || 'Opponent';
                 showOpponentLeftNotification(opponentName);
@@ -626,12 +630,13 @@ function showOpponentLeftNotification(opponentName) {
     notification.innerHTML = `
         <div class="notification-content">
             <p>😢 ${escapeHtml(opponentName)} left the game</p>
-            <button id="close-notification-btn">OK</button>
+            <p class="sub-text">Returning to chat in 3 seconds...</p>
+            <button id="close-notification-btn">Return Now</button>
         </div>
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Style the notification
     notification.style.cssText = `
         position: fixed;
@@ -646,13 +651,20 @@ function showOpponentLeftNotification(opponentName) {
         text-align: center;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     `;
-    
+
     const closeBtn = notification.querySelector('#close-notification-btn');
     closeBtn.addEventListener('click', () => {
         notification.remove();
-        // Redirect back to chat
         window.location.href = 'index.html';
     });
+
+    // Auto-redirect after 3 seconds
+    setTimeout(() => {
+        if (document.body.contains(notification)) {
+            notification.remove();
+            window.location.href = 'index.html';
+        }
+    }, 3000);
 }
 
 function escapeHtml(text) {
@@ -722,7 +734,7 @@ onAuthStateChanged(auth, async (user) => {
     try {
         if (user) {
             currentUser = user;
-            
+
             // Fetch user data from Firestore
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (userDoc.exists()) {

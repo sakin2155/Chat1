@@ -537,6 +537,9 @@ function listenForMoves() {
         // If game is over, show modal
         if (gameOver && lastWinner) {
             showGameOverModal(lastWinner);
+        } else {
+            // If game is not over (e.g. reset), ensure modal is closed
+            closeGameOverModal();
         }
         
         console.log('Game state updated from Firestore');
@@ -792,7 +795,8 @@ function showOpponentLeftNotification(opponentName) {
     notification.innerHTML = `
         <div class="notification-content">
             <p>😢 ${escapeHtml(opponentName)} left the game</p>
-            <button id="close-notification-btn">OK</button>
+            <p class="sub-text">Returning to chat in 3 seconds...</p>
+            <button id="close-notification-btn">Return Now</button>
         </div>
     `;
     
@@ -816,9 +820,16 @@ function showOpponentLeftNotification(opponentName) {
     const closeBtn = notification.querySelector('#close-notification-btn');
     closeBtn.addEventListener('click', () => {
         notification.remove();
-        // Redirect back to chat
         window.location.href = 'index.html';
     });
+
+    // Auto-redirect after 3 seconds
+    setTimeout(() => {
+        if (document.body.contains(notification)) {
+            notification.remove();
+            window.location.href = 'index.html';
+        }
+    }, 3000);
 }
 
 function escapeHtml(text) {

@@ -3016,6 +3016,10 @@ async function sendMessage() {
     if (!rawText.trim() || !currentChatId) return;
     const text = rawText;
 
+    // Clear input immediately for instant feedback
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+
     try {
         // Check if we're editing a message
         if (editingMessageId) {
@@ -3026,8 +3030,6 @@ async function sendMessage() {
                 isEdited: true
             });
 
-            messageInput.value = '';
-            messageInput.style.height = 'auto';
             cancelEdit();
             updateTypingStatus(false);
 
@@ -3051,8 +3053,6 @@ async function sendMessage() {
 
         await addDoc(messagesRef, applyReplyContext(messageData));
 
-        messageInput.value = '';
-        messageInput.style.height = 'auto';
         cancelReply();
         updateTypingStatus(false);
 
@@ -3063,6 +3063,8 @@ async function sendMessage() {
         focusInputAndKeepKeyboard();
     } catch (error) {
         console.error('Error sending message:', error);
+        // Restore text if there was an error
+        messageInput.value = text;
     }
 }
 

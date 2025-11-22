@@ -1429,7 +1429,18 @@ function createMessageElement(messageData) {
 
         if (isMediaMessage(messageData) && messageData.imgUrl) {
             const mediaEl = div.querySelector('.message-image, .message-sticker');
-            mediaEl?.addEventListener('click', () => openImageViewer(messageData.imgUrl));
+            if (mediaEl) {
+                mediaEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Only open full-screen viewer for images, not stickers
+                    if (messageData.type === 'image') {
+                        openImageViewer(messageData.imgUrl);
+                    } else if (messageData.type === 'sticker' || messageData.type === 'gif') {
+                        // For stickers and GIFs, show context menu instead
+                        showMessageOptions(e, messageData.id);
+                    }
+                });
+            }
         }
 
         // Handle game invite button click
@@ -3904,13 +3915,25 @@ document.addEventListener('click', (e) => {
 // ===========================
 // Message Options (Edit/Delete/Reply)
 // ===========================
-function showMessageOptions(event, messageId) {
+async function showMessageOptions(event, messageId) {
     selectedMessageId = messageId;
 
     // Get message element and data
     const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
     const isOwnMessage = messageEl && messageEl.classList.contains('sent');
     const isMediaMessage = messageEl && messageEl.classList.contains('no-bubble');
+    
+    // Get actual message data from Firestore to check type
+    let messageType = 'text';
+    try {
+        const messageRef = doc(db, 'chats', currentChatId, 'messages', messageId);
+        const messageDoc = await getDoc(messageRef);
+        if (messageDoc.exists()) {
+            messageType = messageDoc.data().type || 'text';
+        }
+    } catch (error) {
+        console.error('Error fetching message type:', error);
+    }
 
     // Get all option buttons
     const copyBtn = document.querySelector('.option-btn[data-action="copy"]');
@@ -3921,7 +3944,7 @@ function showMessageOptions(event, messageId) {
     // Configure visibility based on message type
     if (copyBtn) {
         // Copy only available for text messages
-        copyBtn.style.display = !isMediaMessage ? 'block' : 'none';
+        copyBtn.style.display = (messageType === 'text') ? 'block' : 'none';
     }
 
     if (replyBtn) {
@@ -3931,7 +3954,7 @@ function showMessageOptions(event, messageId) {
 
     if (editBtn) {
         // Edit only available for own text messages
-        editBtn.style.display = (isOwnMessage && !isMediaMessage) ? 'block' : 'none';
+        editBtn.style.display = (isOwnMessage && messageType === 'text') ? 'block' : 'none';
     }
 
     if (deleteBtn) {

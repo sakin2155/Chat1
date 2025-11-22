@@ -199,23 +199,16 @@
                             </svg>
                             <span>Sticker</span>
                         </button>
-                        <button class="media-menu-item" data-action="game-tictactoe">
+                        <button class="media-menu-item" data-action="games">
                             <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
                                 stroke="currentColor" stroke-width="2">
                                 <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                                <circle cx="8" cy="12" r="1"></circle>
-                                <circle cx="16" cy="10" r="1"></circle>
-                                <circle cx="16" cy="14" r="1"></circle>
+                                <circle cx="8" cy="12" r="1.5"></circle>
+                                <circle cx="16" cy="10" r="1.5"></circle>
+                                <circle cx="16" cy="14" r="1.5"></circle>
+                                <circle cx="8" cy="8" r="1"></circle>
                             </svg>
-                            <span>Play Tic-Tac-Toe</span>
-                        </button>
-                        <button class="media-menu-item" data-action="game-rps">
-                            <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <path d="M8 12l3 3 5-5"></path>
-                            </svg>
-                            <span>✂️ Rock Paper Scissors</span>
+                            <span>Games</span>
                         </button>
                         <button class="media-menu-item" data-action="voice">
                             <svg class="media-menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -225,7 +218,7 @@
                                 <line x1="12" y1="19" x2="12" y2="23"></line>
                                 <line x1="8" y1="23" x2="16" y2="23"></line>
                             </svg>
-                            <span>🎙️ Voice Message</span>
+                            <span>Voice Message</span>
                         </button>
                     </div>
                     <input type="file" id="image-input" accept="image/*" class="hidden">
@@ -235,6 +228,38 @@
                         <span class="send-btn-icon">➤</span>
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Games Launcher Modal (Hidden by Default) -->
+    <div id="games-launcher-modal" class="games-launcher-modal hidden">
+        <div class="games-launcher-backdrop"></div>
+        <div class="games-launcher-panel">
+            <div class="games-launcher-header">
+                <h3>Select a Game</h3>
+                <button id="close-games-launcher" class="games-close-btn" title="Close">×</button>
+            </div>
+            <div class="games-launcher-body">
+                <button class="game-option" data-game="tictactoe">
+                    <svg class="game-option-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="20" height="20" rx="2"></rect>
+                        <line x1="8" y1="2" x2="8" y2="22"></line>
+                        <line x1="16" y1="2" x2="16" y2="22"></line>
+                        <line x1="2" y1="8" x2="22" y2="8"></line>
+                        <line x1="2" y1="16" x2="22" y2="16"></line>
+                    </svg>
+                    <span class="game-option-name">Tic-Tac-Toe</span>
+                    <span class="game-option-desc">Classic grid game</span>
+                </button>
+                <button class="game-option" data-game="rps">
+                    <svg class="game-option-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M8 12l3 3 5-5"></path>
+                    </svg>
+                    <span class="game-option-name">Rock Paper Scissors</span>
+                    <span class="game-option-desc">Quick decision game</span>
+                </button>
             </div>
         </div>
     </div>

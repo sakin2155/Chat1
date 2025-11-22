@@ -87,6 +87,7 @@ let replyingToMessage = null;
 let editingMessageId = null;
 let editingOriginalText = null;
 let presenceInterval = null;
+let isContextMenuOpen = false;
 let currentUserData = null;
 let unsubscribeCurrentUser = null;
 let profileAvatarTempUrl = null;
@@ -1358,7 +1359,15 @@ function createMessageElement(messageData) {
                 // Show options menu for own messages (both text and media)
                 targetElement.addEventListener('touchstart', (e) => {
                     longPressTimer = setTimeout(() => {
+                        // Prevent default to avoid keyboard closure
+                        e.preventDefault();
                         showMessageOptions(e.touches[0], messageData.id);
+                        // Keep keyboard open on mobile
+                        if (isMobileDevice()) {
+                            setTimeout(() => {
+                                messageInput.focus();
+                            }, 100);
+                        }
                     }, 400);
                 });
 
@@ -1489,12 +1498,15 @@ function createMessageElement(messageData) {
 
                     if (roomId) {
                         try {
-                            // Mark the game invite as started in Firestore
+                            // Mark the game invite as started/expired in Firestore
                             const messageRef = doc(db, 'chats', currentChatId, 'messages', messageData.id);
-                            await updateDoc(messageRef, { gameStarted: true });
+                            await updateDoc(messageRef, { 
+                                gameStarted: true,
+                                joinedAt: serverTimestamp()
+                            });
 
                             // Update button to show expired state
-                            gameInviteBtn.textContent = 'Game Started';
+                            gameInviteBtn.textContent = 'Invite Expired';
                             gameInviteBtn.disabled = true;
                             gameInviteBtn.classList.add('expired');
 
@@ -1616,7 +1628,7 @@ function updateMessage(messageId, messageData) {
         const gameInviteBtn = messageEl.querySelector('.game-invite-btn');
         if (gameInviteBtn && !gameInviteBtn.classList.contains('expired')) {
             // Update button to expired state
-            gameInviteBtn.textContent = 'Game Started';
+            gameInviteBtn.textContent = 'Invite Expired';
             gameInviteBtn.disabled = true;
             gameInviteBtn.classList.add('expired');
             gameInviteBtn.removeAttribute('data-room-id');
@@ -1633,18 +1645,24 @@ function updateMessage(messageId, messageData) {
             messageTextEl.innerHTML = formatMessageText(messageData.text);
         }
 
-        // Update edited label
+        // Update edited label (allow multiple edits)
         const metaEl = messageEl.querySelector('.message-meta');
-        if (messageData.isEdited && !metaEl) {
-            const bubble = messageEl.querySelector('.message-bubble');
-            const editedSpan = document.createElement('span');
-            editedSpan.className = 'message-meta';
-            editedSpan.innerHTML = '<span class="message-edited">(edited)</span>';
-            const statusEl = bubble.querySelector('.message-status');
-            if (statusEl) {
-                bubble.insertBefore(editedSpan, statusEl);
+        if (messageData.isEdited) {
+            if (metaEl) {
+                // Label already exists, just ensure it's visible
+                metaEl.style.display = 'block';
             } else {
-                bubble.appendChild(editedSpan);
+                // Create new edited label
+                const bubble = messageEl.querySelector('.message-bubble');
+                const editedSpan = document.createElement('span');
+                editedSpan.className = 'message-meta';
+                editedSpan.innerHTML = '<span class="message-edited">(edited)</span>';
+                const statusEl = bubble.querySelector('.message-status');
+                if (statusEl) {
+                    bubble.insertBefore(editedSpan, statusEl);
+                } else {
+                    bubble.appendChild(editedSpan);
+                }
             }
         }
 
@@ -3158,6 +3176,13 @@ messageInput.addEventListener('keypress', (e) => {
 // Prevent keyboard from closing on mobile
 if (isMobileDevice()) {
     messageInput.addEventListener('blur', (e) => {
+        // Keep keyboard open if context menu is open
+        if (isContextMenuOpen) {
+            setTimeout(() => {
+                messageInput.focus();
+            }, 50);
+            return;
+        }
         // Only allow blur if user explicitly taps outside
         // Check if the blur is from sending message or other UI interaction
         if (document.activeElement !== messageInput) {
@@ -3464,6 +3489,62 @@ function generateGameRoomId() {
     return 'game_' + Math.random().toString(36).substr(2, 9);
 }
 
+/**
+ * Open Games Launcher Modal
+ */
+function openGamesLauncher() {
+    const modal = document.getElementById('games-launcher-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+/**
+ * Close Games Launcher Modal
+ */
+function closeGamesLauncher() {
+    const modal = document.getElementById('games-launcher-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+/**
+ * Setup Games Launcher Event Listeners
+ */
+function setupGamesLauncher() {
+    const modal = document.getElementById('games-launcher-modal');
+    const closeBtn = document.getElementById('close-games-launcher');
+    const backdrop = document.querySelector('.games-launcher-backdrop');
+    const gameOptions = document.querySelectorAll('.game-option');
+
+    // Close button
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeGamesLauncher);
+    }
+
+    // Backdrop click
+    if (backdrop) {
+        backdrop.addEventListener('click', closeGamesLauncher);
+    }
+
+    // Game option clicks
+    gameOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            const gameType = option.dataset.game;
+            closeGamesLauncher();
+            handleGameInvite(gameType);
+        });
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+            closeGamesLauncher();
+        }
+    });
+}
+
 async function handleGameInvite(gameType = 'tictactoe') {
     if (!currentChatId || !currentChatUser) {
         alert('Please select a user to challenge');
@@ -3556,10 +3637,12 @@ if (mediaMenu) {
             openGifModal();
         } else if (action === 'sticker') {
             openStickerSheet();
-        } else if (action === 'game-tictactoe') {
-            handleGameInvite('tictactoe');
-        } else if (action === 'game-rps') {
-            handleGameInvite('rps');
+        } else if (action === 'games') {
+            openGamesLauncher();
+        } else if (action === 'voice') {
+            if (window.voiceMessenger) {
+                window.voiceMessenger.startRecordingUI();
+            }
         }
     });
 }
@@ -4200,6 +4283,7 @@ document.addEventListener('click', (e) => {
     }
     if (!messageOptions.contains(e.target) && !e.target.closest('.message-options-trigger')) {
         messageOptions.classList.add('hidden');
+        isContextMenuOpen = false;
     }
 });
 
@@ -4248,6 +4332,12 @@ async function showMessageOptions(event, messageId) {
     }
 
     messageOptions.classList.remove('hidden');
+    isContextMenuOpen = true;
+    
+    // Keep keyboard open on mobile when menu appears
+    if (isMobileDevice()) {
+        messageInput.focus();
+    }
 
     const x = event.clientX || event.pageX || 0;
     const y = event.clientY || event.pageY || 0;
@@ -4383,8 +4473,14 @@ document.querySelectorAll('.option-btn').forEach(btn => {
             }
 
             messageOptions.classList.add('hidden');
+            isContextMenuOpen = false;
         } catch (error) {
             console.error('Error performing message action:', error);
         }
     });
 });
+
+// ===========================
+// Initialize Games Launcher
+// ===========================
+setupGamesLauncher();

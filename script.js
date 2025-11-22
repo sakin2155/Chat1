@@ -1199,6 +1199,7 @@ function createMessageElement(messageData) {
         const inviterName = messageData.invitedByName || 'Someone';
         const roomId = messageData.roomId;
         const gameType = messageData.gameType || 'tictactoe';
+        const isExpired = messageData.gameStarted || false;
         
         // Determine game title and emoji
         let gameTitle = 'Tic-Tac-Toe';
@@ -1208,13 +1209,27 @@ function createMessageElement(messageData) {
             gameEmoji = '✂️';
         }
         
+        // Determine invite text based on sender/receiver
+        let inviteText = '';
+        if (isOwnMessage) {
+            inviteText = `You challenged ${messageData.invitedToName || 'them'} to ${gameTitle}!`;
+        } else {
+            inviteText = `${escapeHtml(inviterName)} challenged you to ${gameTitle}!`;
+        }
+        
+        // Determine button state
+        let buttonHtml = '';
+        if (isExpired) {
+            buttonHtml = `<button class="game-invite-btn expired" disabled>Game Started</button>`;
+        } else {
+            buttonHtml = `<button class="game-invite-btn" data-room-id="${roomId}" data-game-type="${gameType}">Tap to Play</button>`;
+        }
+        
         content = `
             <div class="game-invite-card">
                 <div class="game-invite-header">${gameEmoji} Game Invite</div>
-                <div class="game-invite-text">${escapeHtml(inviterName)} challenged you to ${gameTitle}!</div>
-                <button class="game-invite-btn" data-room-id="${roomId}" data-game-type="${gameType}">
-                    Tap to Play
-                </button>
+                <div class="game-invite-text">${inviteText}</div>
+                ${buttonHtml}
             </div>
         `;
     } else if (isMediaMessage(messageData)) {
@@ -1446,16 +1461,29 @@ function createMessageElement(messageData) {
         // Handle game invite button click
         if (isGameInvite) {
             const gameInviteBtn = div.querySelector('.game-invite-btn');
-            if (gameInviteBtn) {
-                gameInviteBtn.addEventListener('click', (e) => {
+            if (gameInviteBtn && !gameInviteBtn.classList.contains('expired')) {
+                gameInviteBtn.addEventListener('click', async (e) => {
                     e.preventDefault();
                     const roomId = gameInviteBtn.dataset.roomId;
                     const gameType = gameInviteBtn.dataset.gameType || 'tictactoe';
                     
                     if (roomId) {
-                        // Determine which game file to use
-                        const gameFile = gameType === 'rps' ? 'rps.html' : 'games.html';
-                        window.location.href = `${gameFile}?roomId=${roomId}&mode=join&chatId=${currentChatId}`;
+                        try {
+                            // Mark the game invite as started in Firestore
+                            const messageRef = doc(db, 'chats', currentChatId, 'messages', messageData.id);
+                            await updateDoc(messageRef, { gameStarted: true });
+                            
+                            // Update button to show expired state
+                            gameInviteBtn.textContent = 'Game Started';
+                            gameInviteBtn.disabled = true;
+                            gameInviteBtn.classList.add('expired');
+                            
+                            // Determine which game file to use
+                            const gameFile = gameType === 'rps' ? 'rps.html' : 'games.html';
+                            window.location.href = `${gameFile}?roomId=${roomId}&mode=join&chatId=${currentChatId}`;
+                        } catch (error) {
+                            console.error('Error marking game as started:', error);
+                        }
                     }
                 });
             }
@@ -1534,6 +1562,7 @@ function updateMessage(messageId, messageData) {
 
     const isOwnMessage = messageData.senderId === currentUser.uid;
     const isDeleted = !!messageData.isDeleted;
+    const isGameInvite = messageData.type === 'game_invite';
 
     // If message is deleted or content changed significantly, replace entire element
     if (isDeleted || messageEl.classList.contains('deleted') !== isDeleted) {
@@ -1541,6 +1570,20 @@ function updateMessage(messageId, messageData) {
         const newEl = createMessageElement(mergedData);
         messagesContainer.replaceChild(newEl, messageEl);
         updateMessageStatusVisibility();
+        return;
+    }
+
+    // Handle game invite expiration
+    if (isGameInvite && messageData.gameStarted) {
+        const gameInviteBtn = messageEl.querySelector('.game-invite-btn');
+        if (gameInviteBtn && !gameInviteBtn.classList.contains('expired')) {
+            // Update button to expired state
+            gameInviteBtn.textContent = 'Game Started';
+            gameInviteBtn.disabled = true;
+            gameInviteBtn.classList.add('expired');
+            gameInviteBtn.removeAttribute('data-room-id');
+            gameInviteBtn.removeAttribute('data-game-type');
+        }
         return;
     }
 

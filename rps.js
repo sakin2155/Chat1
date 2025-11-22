@@ -495,23 +495,43 @@ function displayChatMessage(data, docId, isOwn = false) {
 }
 
 async function sendChatMessage(text) {
-    if (!text.trim()) return;
+    if (!text.trim()) {
+        console.warn('Cannot send empty chat message');
+        return;
+    }
+    
+    if (!roomId) {
+        console.error('Cannot send chat message: roomId is not set');
+        return;
+    }
+    
+    if (!currentUser) {
+        console.error('Cannot send chat message: user not authenticated');
+        return;
+    }
     
     try {
+        console.log('Sending chat message to room:', roomId);
         await addDoc(collection(db, 'rps_games', roomId, 'chat'), {
             senderId: currentUser.uid,
             senderName: currentUserData?.displayName || 'Player',
             message: text.trim(),
             timestamp: serverTimestamp()
         });
-        console.log('Chat message sent');
+        console.log('Chat message sent successfully');
     } catch (error) {
         console.error('Error sending chat message:', error);
+        alert('Failed to send message. Please try again.');
     }
 }
 
 function listenForChatMessages() {
-    console.log('Setting up listener for chat messages...');
+    if (!roomId) {
+        console.error('Cannot listen for chat messages: roomId is not set');
+        return;
+    }
+    
+    console.log('Setting up listener for chat messages in room:', roomId);
     const chatQuery = query(
         collection(db, 'rps_games', roomId, 'chat'),
         orderBy('timestamp', 'asc')
@@ -523,6 +543,7 @@ function listenForChatMessages() {
         querySnap.docs.forEach((doc) => {
             const data = doc.data();
             const isOwn = data.senderId === currentUser.uid;
+            console.log('Processing chat message:', { id: doc.id, sender: data.senderName, isOwn });
             displayChatMessage(data, doc.id, isOwn);
         });
     }, (error) => {
@@ -556,15 +577,10 @@ sendChatBtn.addEventListener('click', async () => {
     }
 });
 
+// Allow Enter for new lines, users must click send button
 chatInput.addEventListener('keypress', async (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        const text = chatInput.value;
-        if (text.trim()) {
-            await sendChatMessage(text);
-            chatInput.value = '';
-        }
-    }
+    // Just allow normal Enter behavior for new lines
+    // Users must click send button to send message
 });
 
 // ===========================

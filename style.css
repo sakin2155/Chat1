@@ -3186,6 +3186,26 @@ video.story-viewer-media {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
+.game-invite-btn.expired {
+    background: rgba(100, 100, 100, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.6);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.game-invite-btn.expired:hover {
+    background: rgba(100, 100, 100, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: none;
+    box-shadow: none;
+}
+
+.game-invite-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 .message.received .game-invite-card {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }

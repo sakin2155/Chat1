@@ -55,6 +55,8 @@ let currentTurn = 'X'; // X always goes first
 let gameActive = false;
 let gameOver = false;
 let socket = null;
+let gameSessionActive = true; // Track if player is still in game
+let opponentLeftListener = null; // Store listener reference for cleanup
 
 // ===========================
 // DOM Elements
@@ -436,6 +438,9 @@ async function initializeGame() {
     // Set up in-game chat
     listenForChatMessages();
     
+    // Set up opponent-left detection
+    listenForOpponentLeft();
+    
     initializeSocket();
 }
 
@@ -734,6 +739,100 @@ async function giveTurnToOpponent() {
 }
 
 // ===========================
+// Session Management
+// ===========================
+async function leaveGame() {
+    if (!gameSessionActive || !roomId) return;
+    
+    console.log('Player leaving game room:', roomId);
+    gameSessionActive = false;
+    
+    try {
+        // Mark player as left in Firestore
+        const playerKey = gameMode === 'host' ? 'host' : 'guest';
+        await setDoc(doc(db, 'games', roomId, 'players', playerKey), {
+            hasLeft: true,
+            leftAt: serverTimestamp()
+        }, { merge: true });
+        
+        console.log('Player marked as left in Firestore');
+    } catch (error) {
+        console.error('Error marking player as left:', error);
+    }
+}
+
+function listenForOpponentLeft() {
+    if (!roomId || !gameMode) return;
+    
+    const opponentKey = gameMode === 'host' ? 'guest' : 'host';
+    console.log('Listening for opponent left:', opponentKey);
+    
+    opponentLeftListener = onSnapshot(doc(db, 'games', roomId, 'players', opponentKey), (docSnap) => {
+        if (docSnap.exists()) {
+            const playerData = docSnap.data();
+            
+            if (playerData.hasLeft && gameSessionActive) {
+                console.log('Opponent has left the game');
+                gameSessionActive = false;
+                
+                // Show notification
+                const opponentName = opponentData?.displayName || 'Opponent';
+                showOpponentLeftNotification(opponentName);
+            }
+        }
+    }, (error) => {
+        console.error('Error listening for opponent left:', error);
+    });
+}
+
+function showOpponentLeftNotification(opponentName) {
+    // Create and show notification
+    const notification = document.createElement('div');
+    notification.className = 'opponent-left-notification';
+    notification.innerHTML = `
+        <div class="notification-content">
+            <p>😢 ${escapeHtml(opponentName)} left the game</p>
+            <button id="close-notification-btn">OK</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Style the notification
+    notification.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        z-index: 10000;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    `;
+    
+    const closeBtn = notification.querySelector('#close-notification-btn');
+    closeBtn.addEventListener('click', () => {
+        notification.remove();
+        // Redirect back to chat
+        window.location.href = 'index.html';
+    });
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// ===========================
 // Event Listeners
 // ===========================
 boardCells.forEach(cell => {
@@ -746,14 +845,15 @@ boardCells.forEach(cell => {
 playAgainBtn.addEventListener('click', async () => {
     closeGameOverModal();
     await resetBoard();
-    console.log('Game reset for both players');
 });
 
-backToChatBtn.addEventListener('click', () => {
+backToChatBtn.addEventListener('click', async () => {
+    await leaveGame();
     window.location.href = 'index.html';
 });
 
-backToChatFromModalBtn.addEventListener('click', () => {
+backToChatFromModalBtn.addEventListener('click', async () => {
+    await leaveGame();
     window.location.href = 'index.html';
 });
 
@@ -785,6 +885,23 @@ chatInput.addEventListener('keypress', async (e) => {
 // Give turn button
 giveTurnBtn.addEventListener('click', async () => {
     await giveTurnToOpponent();
+});
+
+// Handle page unload/close
+window.addEventListener('beforeunload', async (e) => {
+    if (gameSessionActive && roomId) {
+        await leaveGame();
+        // Some browsers may show a confirmation dialog
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+// Handle visibility change (tab switch)
+document.addEventListener('visibilitychange', async () => {
+    if (document.hidden && gameSessionActive && roomId) {
+        await leaveGame();
+    }
 });
 
 // ===========================

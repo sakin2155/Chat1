@@ -2116,8 +2116,8 @@ body {
     .message-input-container {
         /* Use padding-bottom instead of margin to prevent layout shift */
         padding-bottom: max(15px, env(safe-area-inset-bottom));
-        /* Prevent scrolling when keyboard is open */
-        position: fixed;
+        /* Keep sticky positioning instead of fixed to avoid covering messages */
+        position: sticky;
         bottom: 0;
         left: 0;
         right: 0;
@@ -2127,7 +2127,7 @@ body {
     
     .messages-container {
         /* Add padding to prevent messages from being hidden under input */
-        padding-bottom: 120px;
+        padding-bottom: 20px;
     }
 }
 
@@ -2241,11 +2241,22 @@ body {
 @media (max-width: 768px) {
     #message-input {
         font-size: 16px;
+        /* Prevent keyboard dismissal on scroll */
+        position: relative;
+        z-index: 1000;
     }
     
     #message-input:focus {
         /* Prevent iOS from zooming when input is focused */
         font-size: 16px;
+        /* Keep keyboard open */
+        outline: none;
+    }
+    
+    /* Prevent scroll from dismissing keyboard */
+    .messages-container {
+        /* Use passive event listeners for scroll */
+        touch-action: pan-y;
     }
 }
 

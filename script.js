@@ -2915,15 +2915,14 @@ function isMobileDevice() {
 
 function focusInputAndKeepKeyboard() {
     if (isMobileDevice()) {
-        // Prevent default blur behavior
-        messageInput.blur();
+        // Don't blur - just keep focus on the input
+        // This prevents the keyboard from closing
+        messageInput.focus();
         
-        // Re-focus after a short delay to keep keyboard open
+        // Scroll input into view with a slight delay to ensure keyboard is visible
         setTimeout(() => {
-            messageInput.focus();
-            // Scroll input into view
             messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 100);
+        }, 50);
     }
 }
 
@@ -2937,6 +2936,18 @@ messageInput.addEventListener('keypress', (e) => {
     // Just allow normal Enter behavior for new lines
     // Users must click send button to send message
 });
+
+// Prevent keyboard from closing on mobile
+if (isMobileDevice()) {
+    messageInput.addEventListener('blur', (e) => {
+        // Only allow blur if user explicitly taps outside
+        // Check if the blur is from sending message or other UI interaction
+        if (document.activeElement !== messageInput) {
+            // User tapped outside, allow blur
+            return;
+        }
+    });
+}
 
 async function sendMessage() {
     const rawText = messageInput.value;

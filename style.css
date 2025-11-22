@@ -2105,6 +2105,30 @@ body {
     position: sticky;
     bottom: 0;
     z-index: 100;
+    /* Prevent viewport shift when keyboard appears */
+    background: var(--chat-bg);
+    /* Ensure proper stacking context */
+    will-change: transform;
+}
+
+/* Mobile keyboard persistence */
+@media (max-width: 768px) {
+    .message-input-container {
+        /* Use padding-bottom instead of margin to prevent layout shift */
+        padding-bottom: max(15px, env(safe-area-inset-bottom));
+        /* Prevent scrolling when keyboard is open */
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .messages-container {
+        /* Add padding to prevent messages from being hidden under input */
+        padding-bottom: 120px;
+    }
 }
 
 .icon-btn {
@@ -2204,6 +2228,25 @@ body {
     resize: none;
     max-height: 100px;
     scrollbar-width: none;
+    /* Mobile keyboard handling */
+    appearance: none;
+    -webkit-appearance: none;
+    user-select: text;
+    -webkit-user-select: text;
+    /* Prevent zoom on iOS when focused */
+    font-size: 16px;
+}
+
+/* iOS specific - prevent zoom on input focus */
+@media (max-width: 768px) {
+    #message-input {
+        font-size: 16px;
+    }
+    
+    #message-input:focus {
+        /* Prevent iOS from zooming when input is focused */
+        font-size: 16px;
+    }
 }
 
 #message-input:focus {

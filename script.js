@@ -2907,9 +2907,36 @@ window.addEventListener('resize', () => {
 });
 
 // ===========================
+// Mobile Keyboard Persistence
+// ===========================
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function focusInputAndKeepKeyboard() {
+    if (isMobileDevice()) {
+        // Prevent default blur behavior
+        messageInput.blur();
+        
+        // Re-focus after a short delay to keep keyboard open
+        setTimeout(() => {
+            messageInput.focus();
+            // Scroll input into view
+            messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+    }
+}
+
+// ===========================
 // Send Message
 // ===========================
 sendBtn.addEventListener('click', sendMessage);
+
+// Allow Enter key for new lines (no send on Enter)
+messageInput.addEventListener('keypress', (e) => {
+    // Just allow normal Enter behavior for new lines
+    // Users must click send button to send message
+});
 
 async function sendMessage() {
     const rawText = messageInput.value;
@@ -2930,6 +2957,9 @@ async function sendMessage() {
             messageInput.style.height = 'auto';
             cancelEdit();
             updateTypingStatus(false);
+            
+            // Keep keyboard open on mobile
+            focusInputAndKeepKeyboard();
             return;
         }
 
@@ -2955,6 +2985,9 @@ async function sendMessage() {
         
         // Update streak on message send
         await updateStreakOnMessage(currentChatId, currentUser.uid);
+        
+        // Keep keyboard open on mobile after sending
+        focusInputAndKeepKeyboard();
     } catch (error) {
         console.error('Error sending message:', error);
     }

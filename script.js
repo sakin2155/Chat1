@@ -2929,7 +2929,14 @@ function focusInputAndKeepKeyboard() {
 // ===========================
 // Send Message
 // ===========================
-sendBtn.addEventListener('click', sendMessage);
+sendBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    // Don't let the button steal focus from input
+    if (isMobileDevice()) {
+        messageInput.focus();
+    }
+    sendMessage();
+});
 
 // Allow Enter key for new lines (no send on Enter)
 messageInput.addEventListener('keypress', (e) => {

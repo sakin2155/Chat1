@@ -3964,22 +3964,41 @@ async function showMessageOptions(event, messageId) {
 
     messageOptions.classList.remove('hidden');
 
-    const x = event.clientX;
-    const y = event.clientY;
+    const x = event.clientX || event.pageX || 0;
+    const y = event.clientY || event.pageY || 0;
 
     // Get menu dimensions
-    const menuWidth = 120;
-    const menuHeight = 150; // increased for more options
+    const menuWidth = 140;
+    const menuHeight = 160;
+    
+    // Padding from screen edges
+    const padding = 12;
 
-    // Calculate position
+    // Calculate position with smart positioning
     let left = x;
     let top = y;
 
-    // Keep within screen bounds
-    if (left + menuWidth > window.innerWidth - 10) left = window.innerWidth - menuWidth - 10;
-    if (top + menuHeight > window.innerHeight - 10) top = window.innerHeight - menuHeight - 10;
-    if (left < 10) left = 10;
-    if (top < 10) top = 10;
+    // Horizontal boundary check
+    if (left + menuWidth > window.innerWidth - padding) {
+        // Menu would go off right edge - position it to the left of cursor
+        left = Math.max(padding, x - menuWidth - 8);
+    } else {
+        // Position to the right of cursor
+        left = Math.max(padding, left);
+    }
+
+    // Vertical boundary check
+    if (top + menuHeight > window.innerHeight - padding) {
+        // Menu would go off bottom edge - position it above cursor
+        top = Math.max(padding, y - menuHeight - 8);
+    } else {
+        // Position below cursor
+        top = Math.max(padding, top);
+    }
+
+    // Final boundary enforcement
+    left = Math.max(padding, Math.min(left, window.innerWidth - menuWidth - padding));
+    top = Math.max(padding, Math.min(top, window.innerHeight - menuHeight - padding));
 
     messageOptions.style.left = `${left}px`;
     messageOptions.style.top = `${top}px`;

@@ -2251,6 +2251,9 @@ body {
         font-size: 16px;
         /* Keep keyboard open */
         outline: none;
+        box-shadow: none;
+        -webkit-box-shadow: none;
+        border-color: var(--border-color);
     }
     
     /* Prevent scroll from dismissing keyboard */
@@ -2263,6 +2266,8 @@ body {
 #message-input:focus {
     outline: none;
     border-color: var(--message-sent);
+    box-shadow: none;
+    -webkit-appearance: none;
 }
 
 #message-input::placeholder {

@@ -1207,9 +1207,30 @@ body {
 .story-strip {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 0 22px 12px;
+    gap: 16px;
+    padding: 16px 22px 32px;
     overflow-x: auto;
+    scroll-behavior: smooth;
+    position: relative;
+    background: linear-gradient(45deg, rgba(28, 28, 30, 0.4), rgba(44, 44, 46, 0.4), rgba(28, 28, 30, 0.4));
+    background-size: 200% 200%;
+    animation: gradientBG 8s ease infinite;
+    mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+}
+
+@keyframes gradientBG {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
 }
 
 .story-strip::-webkit-scrollbar {
@@ -1217,20 +1238,39 @@ body {
 }
 
 .story-card {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 18px;
-    width: 78px;
-    min-width: 78px;
-    padding: 10px 8px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50%;
+    width: 82px;
+    height: 82px;
+    min-width: 82px;
+    padding: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
     cursor: pointer;
     position: relative;
-    transition: transform 0.15s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     animation: fadeInUp 0.3s ease-out backwards;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.story-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .story-card:nth-child(1) {
@@ -1250,29 +1290,71 @@ body {
 }
 
 .story-card:hover {
-    transform: translateY(-2px);
+    transform: translateY(-4px) scale(1.02);
     border-color: rgba(255, 255, 255, 0.35);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 20px rgba(79, 157, 255, 0.15);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%);
+}
+
+.story-card:hover::before {
+    opacity: 1;
+}
+
+.story-card:active {
+    transform: translateY(-2px) scale(0.98);
 }
 
 .story-card small {
+    position: absolute;
+    bottom: -22px;
+    left: 50%;
+    transform: translateX(-50%);
     font-size: 12px;
     text-align: center;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
 }
 
 .story-card.add {
-    background: rgba(79, 157, 255, 0.15);
-    border: 1px dashed rgba(79, 157, 255, 0.7);
+    background: linear-gradient(135deg, rgba(79, 157, 255, 0.25) 0%, rgba(79, 157, 255, 0.15) 100%);
+    border: 2px dashed rgba(79, 157, 255, 0.8);
+    border-radius: 50%;
+    width: 82px;
+    height: 82px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     color: #fff;
 }
 
+.story-card.add small {
+    position: absolute;
+    bottom: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.story-card.add:hover {
+    background: linear-gradient(135deg, rgba(79, 157, 255, 0.35) 0%, rgba(79, 157, 255, 0.2) 100%);
+    border-color: rgba(79, 157, 255, 1);
+    box-shadow: 0 12px 28px rgba(79, 157, 255, 0.25), 0 0 20px rgba(79, 157, 255, 0.2);
+}
+
 .story-card.add .story-avatar {
-    border: 2px dashed rgba(79, 157, 255, 0.8);
+    border: 2px dashed rgba(79, 157, 255, 0.9);
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(79, 157, 255, 0.2) 0%, rgba(79, 157, 255, 0.1) 100%);
 }
 
 .story-card.add .story-avatar span {
-    font-size: 26px;
+    font-size: 28px;
+    font-weight: 300;
 }
 
 .story-card.add.uploading {
@@ -1286,47 +1368,63 @@ body {
 
 .story-list {
     display: flex;
-    gap: 14px;
+    gap: 16px;
 }
 
 .story-empty {
     font-size: 13px;
     color: rgba(255, 255, 255, 0.5);
     align-self: center;
+    font-style: italic;
 }
 
 .story-avatar {
-    width: 54px;
-    height: 54px;
-    border-radius: 18px;
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
     background: rgba(255, 255, 255, 0.08);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 28px;
     color: #fff;
     position: relative;
     overflow: hidden;
     background-size: cover;
     background-position: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease;
+}
+
+.story-card:hover .story-avatar {
+    transform: scale(1.05);
 }
 
 .story-avatar::after {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 18px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border: 3px solid transparent;
+    background: linear-gradient(135deg, rgba(79, 157, 255, 0.8), rgba(255, 107, 255, 0.8)) border-box;
+    -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
     pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.3s ease;
 }
 
 .story-card.seen .story-avatar::after {
-    border-color: rgba(255, 255, 255, 0.15);
+    opacity: 0.3;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.15)) border-box;
 }
 
 .story-card .story-avatar.initials {
-    background: linear-gradient(135deg, #5a5dff, #30b5ff);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     text-transform: uppercase;
+    font-weight: 600;
 }
 
 .user-item {
@@ -1609,12 +1707,15 @@ body {
     backface-visibility: hidden;
     scrollbar-width: none;
     animation: fadeIn 0.3s ease-out;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 @keyframes fadeIn {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -1758,9 +1859,11 @@ body {
         transform: scale(0.95);
         opacity: 0;
     }
+
     50% {
         transform: scale(1.02);
     }
+
     100% {
         transform: scale(1);
         opacity: 1;
@@ -1876,8 +1979,9 @@ body {
 }
 
 .message.deleted .message-bubble {
-    background: rgba(0, 0, 0, 0.08);
+    background: transparent !important;
     border: 1px dashed var(--border-color);
+    box-shadow: none !important;
 }
 
 .message-deleted-text {
@@ -2124,7 +2228,7 @@ body {
         width: 100%;
         box-sizing: border-box;
     }
-    
+
     .messages-container {
         /* Add padding to prevent messages from being hidden under input */
         padding-bottom: 20px;
@@ -2245,14 +2349,14 @@ body {
         position: relative;
         z-index: 1000;
     }
-    
+
     #message-input:focus {
         /* Prevent iOS from zooming when input is focused */
         font-size: 16px;
         /* Keep keyboard open */
         outline: none;
     }
-    
+
     /* Prevent scroll from dismissing keyboard */
     .messages-container {
         /* Use passive event listeners for scroll */
@@ -2301,7 +2405,7 @@ body {
         /* Don't allow focus */
         pointer-events: auto;
     }
-    
+
     .send-btn:focus {
         outline: none;
         box-shadow: none;
@@ -3138,6 +3242,7 @@ video.story-viewer-media {
         opacity: 0;
         transform: translateY(10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);

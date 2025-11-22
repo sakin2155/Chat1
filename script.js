@@ -132,7 +132,7 @@ function showNotification(message, duration = 3000) {
     if (!successNotification || !notificationMessage) return;
     notificationMessage.textContent = message;
     successNotification.classList.remove('hidden');
-    
+
     // Auto-hide after duration
     setTimeout(() => {
         successNotification.classList.add('hidden');
@@ -926,7 +926,7 @@ function createUserItem(userData) {
 
     // Load and listen to latest message preview
     loadLatestMessagePreview(userData.uid, div);
-    
+
     // Load and listen to unread message count
     listenToUnreadCount(userData.uid, div);
 
@@ -996,7 +996,7 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
         } else {
             const latestMessage = snapshot.docs[0].data();
             const previewText = getMessagePreviewText(latestMessage);
-            
+
             // Add "You: " prefix if current user sent the message
             const isCurrentUserSender = latestMessage.senderId === currentUser.uid;
             const displayText = isCurrentUserSender ? `You: ${previewText}` : previewText;
@@ -1030,7 +1030,7 @@ function listenToUnreadCount(otherUserId, userItemEl) {
         if (!badgeEl) return;
 
         const unreadCount = snapshot.size;
-        
+
         if (unreadCount > 0) {
             badgeEl.textContent = unreadCount > 9 ? '9+' : unreadCount;
             badgeEl.dataset.count = unreadCount;
@@ -1176,6 +1176,7 @@ function createMessageElement(messageData) {
     const div = document.createElement('div');
     div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}`;
     div.dataset.messageId = messageData.id;
+    div.dataset.messageType = messageData.type || 'text';
     // Store timestamp in milliseconds for proper sorting
     // Use server timestamp if available, otherwise use current time as fallback
     let timestamp = 0;
@@ -1200,7 +1201,7 @@ function createMessageElement(messageData) {
         const roomId = messageData.roomId;
         const gameType = messageData.gameType || 'tictactoe';
         const isExpired = messageData.gameStarted || false;
-        
+
         // Determine game title and emoji
         let gameTitle = 'Tic-Tac-Toe';
         let gameEmoji = '⭕';
@@ -1208,7 +1209,7 @@ function createMessageElement(messageData) {
             gameTitle = 'Rock Paper Scissors';
             gameEmoji = '✂️';
         }
-        
+
         // Determine invite text based on sender/receiver
         let inviteText = '';
         if (isOwnMessage) {
@@ -1216,7 +1217,7 @@ function createMessageElement(messageData) {
         } else {
             inviteText = `${escapeHtml(inviterName)} challenged you to ${gameTitle}!`;
         }
-        
+
         // Determine button state
         let buttonHtml = '';
         if (isExpired) {
@@ -1224,7 +1225,7 @@ function createMessageElement(messageData) {
         } else {
             buttonHtml = `<button class="game-invite-btn" data-room-id="${roomId}" data-game-type="${gameType}">Tap to Play</button>`;
         }
-        
+
         content = `
             <div class="game-invite-card">
                 <div class="game-invite-header">${gameEmoji} Game Invite</div>
@@ -1328,7 +1329,7 @@ function createMessageElement(messageData) {
                 targetElement.addEventListener('touchstart', (e) => {
                     longPressTimer = setTimeout(() => {
                         showReactionPopup(e, messageData.id);
-                    }, 500);
+                    }, 400);
                 });
 
                 targetElement.addEventListener('touchend', () => {
@@ -1339,7 +1340,7 @@ function createMessageElement(messageData) {
                 targetElement.addEventListener('touchstart', (e) => {
                     longPressTimer = setTimeout(() => {
                         showMessageOptions(e.touches[0], messageData.id);
-                    }, 500);
+                    }, 400);
                 });
 
                 targetElement.addEventListener('touchend', () => {
@@ -1466,18 +1467,18 @@ function createMessageElement(messageData) {
                     e.preventDefault();
                     const roomId = gameInviteBtn.dataset.roomId;
                     const gameType = gameInviteBtn.dataset.gameType || 'tictactoe';
-                    
+
                     if (roomId) {
                         try {
                             // Mark the game invite as started in Firestore
                             const messageRef = doc(db, 'chats', currentChatId, 'messages', messageData.id);
                             await updateDoc(messageRef, { gameStarted: true });
-                            
+
                             // Update button to show expired state
                             gameInviteBtn.textContent = 'Game Started';
                             gameInviteBtn.disabled = true;
                             gameInviteBtn.classList.add('expired');
-                            
+
                             // Determine which game file to use
                             const gameFile = gameType === 'rps' ? 'rps.html' : 'games.html';
                             window.location.href = `${gameFile}?roomId=${roomId}&mode=join&chatId=${currentChatId}`;
@@ -1495,7 +1496,7 @@ function createMessageElement(messageData) {
 
 function scrollToBottom(smooth = false) {
     if (!messagesContainer) return;
-    
+
     // Use multiple requestAnimationFrames to ensure DOM is fully updated
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -1522,7 +1523,7 @@ function appendMessage(messageData) {
         // Insert message in correct chronological order based on timestamp
         const existingMessages = messagesContainer.querySelectorAll('.message');
         let inserted = false;
-        
+
         // Extract new message timestamp using same logic as createMessageElement
         let newTimestamp = 0;
         if (messageData.timestamp?.seconds) {
@@ -1533,23 +1534,23 @@ function appendMessage(messageData) {
             // Fallback to current time for messages that haven't been synced yet
             newTimestamp = Date.now();
         }
-        
+
         for (let i = 0; i < existingMessages.length; i++) {
             const existingMsg = existingMessages[i];
             const existingTimestamp = parseInt(existingMsg.dataset.timestamp || '0');
-            
+
             if (newTimestamp < existingTimestamp) {
                 messagesContainer.insertBefore(messageEl, existingMsg);
                 inserted = true;
                 break;
             }
         }
-        
+
         // If not inserted yet, append to end
         if (!inserted) {
             messagesContainer.appendChild(messageEl);
         }
-        
+
         updateMessageStatusVisibility();
         // Auto-scroll to bottom when new message is added
         scrollToBottom(true);
@@ -1690,13 +1691,13 @@ function getDisplayStatus(userData) {
 
 function getChatHeaderStatus(userData) {
     if (!userData) return 'offline';
-    
+
     const lastActive = userData.lastActive?.toDate
         ? userData.lastActive.toDate()
         : userData.lastActive
             ? new Date(userData.lastActive)
             : null;
-    
+
     // Check if user is currently online
     if (lastActive) {
         const isRecentlyActive = (Date.now() - lastActive.getTime()) < PRESENCE_TIMEOUT;
@@ -1706,12 +1707,12 @@ function getChatHeaderStatus(userData) {
     } else if (userData.status === 'online') {
         return 'Online';
     }
-    
+
     // User is offline - show relative time
     if (lastActive) {
         const now = new Date();
         const diff = now - lastActive;
-        
+
         if (diff < 60000) return 'Active just now';
         if (diff < 3600000) return `Active ${Math.floor(diff / 60000)}m ago`;
         if (diff < 86400000) {
@@ -1725,7 +1726,7 @@ function getChatHeaderStatus(userData) {
         // For older timestamps, show the date
         return `Active ${lastActive.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
     }
-    
+
     return 'offline';
 }
 
@@ -2833,9 +2834,9 @@ function applyThemeToChat(theme) {
         messagesContainer.style.backgroundBlendMode = 'normal';
     }
 
-    // Apply bubble colors to all messages
-    const sentMessages = messagesContainer.querySelectorAll('.message.sent .message-bubble');
-    const receivedMessages = messagesContainer.querySelectorAll('.message.received .message-bubble');
+    // Apply bubble colors to all messages (excluding deleted ones)
+    const sentMessages = messagesContainer.querySelectorAll('.message.sent:not(.deleted) .message-bubble');
+    const receivedMessages = messagesContainer.querySelectorAll('.message.received:not(.deleted) .message-bubble');
 
     sentMessages.forEach(msg => {
         msg.style.backgroundColor = theme.sentBubbleColor;
@@ -2870,10 +2871,10 @@ function loadThemeForChat() {
             if (doc.exists()) {
                 const themeData = doc.data();
                 console.log('Theme updated from Firestore:', themeData);
-                
+
                 // Update local cache
                 chatThemes.set(currentChatId, themeData);
-                
+
                 // Apply the theme immediately
                 applyThemeToChat(themeData);
             } else {
@@ -2972,7 +2973,7 @@ function focusInputAndKeepKeyboard() {
         // Don't blur - just keep focus on the input
         // This prevents the keyboard from closing
         messageInput.focus();
-        
+
         // Scroll input into view with a slight delay to ensure keyboard is visible
         setTimeout(() => {
             messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -3029,7 +3030,7 @@ async function sendMessage() {
             messageInput.style.height = 'auto';
             cancelEdit();
             updateTypingStatus(false);
-            
+
             // Keep keyboard open on mobile
             focusInputAndKeepKeyboard();
             return;
@@ -3054,10 +3055,10 @@ async function sendMessage() {
         messageInput.style.height = 'auto';
         cancelReply();
         updateTypingStatus(false);
-        
+
         // Update streak on message send
         await updateStreakOnMessage(currentChatId, currentUser.uid);
-        
+
         // Keep keyboard open on mobile after sending
         focusInputAndKeepKeyboard();
     } catch (error) {
@@ -3112,7 +3113,7 @@ async function loadStreakData(chatId) {
     try {
         const streakRef = doc(db, 'chats', chatId, 'metadata', 'streak');
         const streakDoc = await getDoc(streakRef);
-        
+
         if (streakDoc.exists()) {
             const data = streakDoc.data();
             streakData.set(chatId, {
@@ -3152,7 +3153,7 @@ async function updateStreakOnMessage(chatId, senderId) {
     try {
         const streakRef = doc(db, 'chats', chatId, 'metadata', 'streak');
         const today = new Date().toDateString();
-        
+
         // Get current streak from Firestore (fresh data)
         const streakDoc = await getDoc(streakRef);
         let currentStreak = streakDoc.exists() ? streakDoc.data() : {
@@ -3230,31 +3231,37 @@ async function handleGameInvite(gameType = 'tictactoe') {
 
     try {
         showLoading('Creating game invite...');
-        
+
         // Generate unique room ID
         const roomId = generateGameRoomId();
-        
+
         // Determine game details
         let gameTitle = 'Tic-Tac-Toe';
         let gameFile = 'games.html';
         let gameEmoji = '⭕';
-        
+
         if (gameType === 'rps') {
             gameTitle = 'Rock Paper Scissors';
             gameFile = 'rps.html';
             gameEmoji = '✂️';
         }
-        
+
         // Create game invite message
         const gameInviteMessage = {
             text: `${gameEmoji} ${currentUserData?.displayName || 'Someone'} challenged you to ${gameTitle}!`,
             type: 'game_invite',
+            senderId: currentUser.uid,
             roomId: roomId,
             gameType: gameType,
             invitedBy: currentUser.uid,
             invitedByName: currentUserData?.displayName || 'Unknown',
             invitedByAvatar: currentUserData?.photoURL || '',
-            timestamp: serverTimestamp()
+            invitedToName: currentChatUser?.displayName || 'them',
+            gameStarted: false,
+            timestamp: serverTimestamp(),
+            seen: false,
+            reactions: [],
+            isDeleted: false
         };
 
         // Send the invite message
@@ -3793,7 +3800,7 @@ async function markMessagesAsSeen() {
         try {
             // Check if user is at the bottom of the message list (viewing recent messages)
             const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop <= messagesContainer.clientHeight + 100;
-            
+
             // Only mark messages as seen if user is at the bottom (viewing recent messages)
             if (!isAtBottom) return;
 
@@ -3965,17 +3972,11 @@ async function showMessageOptions(event, messageId) {
     const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
     const isOwnMessage = messageEl && messageEl.classList.contains('sent');
     const isMediaMessage = messageEl && messageEl.classList.contains('no-bubble');
-    
-    // Get actual message data from Firestore to check type
+
+    // Get message type from data attribute to avoid network delay
     let messageType = 'text';
-    try {
-        const messageRef = doc(db, 'chats', currentChatId, 'messages', messageId);
-        const messageDoc = await getDoc(messageRef);
-        if (messageDoc.exists()) {
-            messageType = messageDoc.data().type || 'text';
-        }
-    } catch (error) {
-        console.error('Error fetching message type:', error);
+    if (messageEl) {
+        messageType = messageEl.dataset.messageType || 'text';
     }
 
     // Get all option buttons
@@ -4013,7 +4014,7 @@ async function showMessageOptions(event, messageId) {
     // Get menu dimensions
     const menuWidth = 140;
     const menuHeight = 160;
-    
+
     // Padding from screen edges
     const padding = 12;
 

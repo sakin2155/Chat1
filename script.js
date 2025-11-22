@@ -1171,10 +1171,11 @@ function createMessageElement(messageData) {
     const isDeleted = !!messageData.isDeleted;
     const isSystemMessage = messageData.type === 'system';
     const isGameInvite = messageData.type === 'game_invite';
+    const isVoiceMessage = !isDeleted && messageData.type === 'voice';
     const isStickerOrGif = !isDeleted && (messageData.type === 'sticker' || messageData.type === 'gif');
 
     const div = document.createElement('div');
-    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}`;
+    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}`;
     div.dataset.messageId = messageData.id;
     div.dataset.messageType = messageData.type || 'text';
     // Store timestamp in milliseconds for proper sorting
@@ -1231,6 +1232,24 @@ function createMessageElement(messageData) {
                 <div class="game-invite-header">${gameEmoji} Game Invite</div>
                 <div class="game-invite-text">${inviteText}</div>
                 ${buttonHtml}
+            </div>
+        `;
+    } else if (messageData.type === 'voice') {
+        // Voice message player - no bubble
+        const duration = messageData.duration || 0;
+        const durationText = formatVoiceDuration(duration);
+        const messageId = messageData.id;
+        content = `
+            <div class="voice-message-player">
+                <button class="voice-play-btn-inline" data-voice-id="${messageId}" title="Play voice message">
+                    <svg class="voice-play-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                </button>
+                <div class="voice-progress-inline" data-voice-id="${messageId}">
+                    <div class="voice-progress-inline-fill" data-voice-id="${messageId}"></div>
+                </div>
+                <span class="voice-duration-inline">${durationText}</span>
             </div>
         `;
     } else if (isMediaMessage(messageData)) {
@@ -1486,6 +1505,24 @@ function createMessageElement(messageData) {
                             console.error('Error marking game as started:', error);
                         }
                     }
+                });
+            }
+        }
+
+        // Voice message playback
+        if (messageData.type === 'voice' && messageData.voiceUrl) {
+            const playBtn = div.querySelector('.voice-play-btn-inline');
+            const progressBar = div.querySelector('.voice-progress-inline');
+            if (playBtn) {
+                playBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleVoicePlayback(messageData.id, messageData.voiceUrl, playBtn, progressBar);
+                });
+            }
+            if (progressBar) {
+                progressBar.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    seekVoiceMessage(messageData.id, messageData.voiceUrl, e, progressBar);
                 });
             }
         }
@@ -2902,6 +2939,125 @@ function formatMessageText(text) {
     return escapeHtml(text).replace(/\n/g, '<br>');
 }
 
+/**
+ * Format voice message duration from milliseconds to MM:SS
+ */
+function formatVoiceDuration(milliseconds) {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Global voice players map for tracking playback state
+ */
+const voicePlayersMap = new Map(); // messageId -> { audio, isPlaying }
+
+/**
+ * Toggle voice message playback
+ */
+function toggleVoicePlayback(messageId, voiceUrl, playBtn, progressBar) {
+    let playerData = voicePlayersMap.get(messageId);
+
+    if (!playerData) {
+        // Create new audio element
+        const audio = new Audio(voiceUrl);
+        playerData = { audio, isPlaying: false };
+        voicePlayersMap.set(messageId, playerData);
+
+        // Update progress on time update
+        audio.addEventListener('timeupdate', () => {
+            updateVoiceProgress(messageId, audio, progressBar);
+        });
+
+        // Reset button when finished
+        audio.addEventListener('ended', () => {
+            playerData.isPlaying = false;
+            updateVoicePlayButtonState(playBtn, false);
+        });
+
+        // Handle errors
+        audio.addEventListener('error', () => {
+            console.error('Error playing voice message:', audio.error);
+            updateVoicePlayButtonState(playBtn, false, true);
+            showNotification('Failed to play voice message');
+        });
+    }
+
+    const audio = playerData.audio;
+
+    if (playerData.isPlaying) {
+        // Pause
+        audio.pause();
+        playerData.isPlaying = false;
+        updateVoicePlayButtonState(playBtn, false);
+    } else {
+        // Play
+        audio.play().catch(error => {
+            console.error('Error playing audio:', error);
+            showNotification('Failed to play voice message');
+        });
+        playerData.isPlaying = true;
+        updateVoicePlayButtonState(playBtn, true);
+    }
+}
+
+/**
+ * Update voice play button state with SVG icon
+ */
+function updateVoicePlayButtonState(playBtn, isPlaying, isError = false) {
+    if (!playBtn) return;
+
+    const icon = playBtn.querySelector('.voice-play-icon');
+    if (!icon) return;
+
+    if (isError) {
+        // Error state - show X icon
+        icon.innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>';
+    } else if (isPlaying) {
+        // Playing state - show pause icon
+        icon.innerHTML = '<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>';
+    } else {
+        // Paused/stopped state - show play icon
+        icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
+    }
+}
+
+/**
+ * Update voice message progress bar
+ */
+function updateVoiceProgress(messageId, audio, progressBar) {
+    if (!progressBar || !audio.duration) return;
+
+    const percentage = (audio.currentTime / audio.duration) * 100;
+    const progressFill = progressBar.querySelector('.voice-progress-small-fill');
+    if (progressFill) {
+        progressFill.style.width = percentage + '%';
+    }
+}
+
+/**
+ * Seek voice message
+ */
+function seekVoiceMessage(messageId, voiceUrl, event, progressBar) {
+    let playerData = voicePlayersMap.get(messageId);
+
+    if (!playerData) {
+        // Create audio if it doesn't exist
+        const audio = new Audio(voiceUrl);
+        playerData = { audio, isPlaying: false };
+        voicePlayersMap.set(messageId, playerData);
+    }
+
+    const audio = playerData.audio;
+    if (audio.duration) {
+        const rect = progressBar.getBoundingClientRect();
+        const percentage = (event.clientX - rect.left) / rect.width;
+        audio.currentTime = percentage * audio.duration;
+    }
+}
+
 function isMediaMessage(messageData) {
     if (!messageData || !messageData.imgUrl) return false;
     return ['image', 'gif', 'sticker'].includes(messageData.type);
@@ -3080,6 +3236,52 @@ function applyReplyContext(messageData) {
     return messageData;
 }
 
+/**
+ * Delete media from Cloudinary
+ * Extracts public_id from URL and deletes the resource
+ */
+async function deleteMediaFromCloudinary(mediaUrl) {
+    if (!mediaUrl) return;
+
+    try {
+        // Extract public_id from Cloudinary URL
+        // URL format: https://res.cloudinary.com/{cloud_name}/image/upload/v{version}/{public_id}
+        const urlParts = mediaUrl.split('/');
+        const versionIndex = urlParts.findIndex(part => part.startsWith('v'));
+        
+        if (versionIndex === -1) {
+            console.warn('Could not extract public_id from URL:', mediaUrl);
+            return;
+        }
+
+        // Get public_id (everything after version, without extension)
+        const publicIdWithExt = urlParts.slice(versionIndex + 1).join('/');
+        const publicId = publicIdWithExt.split('.')[0];
+
+        // Call Cloudinary delete API
+        const response = await fetch(
+            `https://api.cloudinary.com/v1_1/${window.CLOUDINARY_CLOUD_NAME || 'dxhn3fzfu'}/resources/image/upload`,
+            {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.CLOUDINARY_API_KEY || ''}`
+                },
+                body: JSON.stringify({
+                    public_ids: [publicId]
+                })
+            }
+        );
+
+        if (!response.ok) {
+            console.warn('Failed to delete from Cloudinary:', response.status);
+        }
+    } catch (error) {
+        console.error('Error deleting media from Cloudinary:', error);
+        // Don't throw - allow message deletion to continue
+    }
+}
+
 async function sendMediaMessage(mediaUrl, messageType) {
     if (!currentChatId || !mediaUrl || !currentUser) return;
     const messagesRef = collection(db, 'chats', currentChatId, 'messages');
@@ -3100,6 +3302,43 @@ async function sendMediaMessage(mediaUrl, messageType) {
     // Auto-scroll to bottom when media message is sent
     scrollToBottom(true);
 }
+
+/**
+ * Send voice message to Firestore
+ * Called from voice-messaging.js
+ */
+async function sendVoiceMessage(voiceUrl, duration) {
+    if (!currentChatId || !voiceUrl || !currentUser) return;
+    try {
+        const messagesRef = collection(db, 'chats', currentChatId, 'messages');
+        const payload = applyReplyContext({
+            voiceUrl: voiceUrl,
+            duration: duration,
+            senderId: currentUser.uid,
+            timestamp: serverTimestamp(),
+            type: 'voice',
+            seen: false,
+            reactions: [],
+            isDeleted: false
+        });
+        await addDoc(messagesRef, payload);
+        if (replyingToMessage) {
+            cancelReply();
+        }
+        updateTypingStatus(false);
+        // Update streak on voice message
+        await updateStreakOnMessage(currentChatId, currentUser.uid);
+        // Auto-scroll to bottom
+        scrollToBottom(true);
+        showNotification('Voice message sent!');
+    } catch (error) {
+        console.error('Error sending voice message:', error);
+        showNotification('Failed to send voice message', 3000);
+    }
+}
+
+// Make sendVoiceMessage available globally for voice-messaging.js
+window.sendVoiceMessage = sendVoiceMessage;
 
 // ===========================
 // Streak System (Custom Logic)
@@ -4100,9 +4339,35 @@ document.querySelectorAll('.option-btn').forEach(btn => {
                     });
                 }
             } else if (action === 'delete') {
+                // Get message data to check if it's a voice/media message
+                const messageDoc = await getDoc(messageRef);
+                const messageData = messageDoc.data();
+
+                // Delete from Cloudinary if it's a voice or media message
+                if (messageData && (messageData.voiceUrl || messageData.imgUrl)) {
+                    try {
+                        await deleteMediaFromCloudinary(messageData.voiceUrl || messageData.imgUrl);
+                    } catch (error) {
+                        console.error('Error deleting from Cloudinary:', error);
+                        // Continue with message deletion even if Cloudinary deletion fails
+                    }
+                }
+
+                // Delete playback instance if it exists
+                if (messageData && messageData.type === 'voice') {
+                    const playerData = voicePlayersMap.get(messageData.id);
+                    if (playerData && playerData.audio) {
+                        playerData.audio.pause();
+                        playerData.audio.src = '';
+                    }
+                    voicePlayersMap.delete(messageData.id);
+                }
+
+                // Mark message as deleted in Firestore
                 await updateDoc(messageRef, {
                     text: '',
                     imgUrl: '',
+                    voiceUrl: '',
                     type: 'text',
                     reactions: [],
                     replyTo: null,

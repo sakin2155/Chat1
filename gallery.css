@@ -101,6 +101,11 @@ body {
     transform: translateY(0);
 }
 
+.upload-btn span {
+    font-size: 14px;
+    font-weight: 600;
+}
+
 /* ===========================
    Upload Modal
    =========================== */
@@ -127,6 +132,7 @@ body {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -149,6 +155,7 @@ body {
         transform: translateY(20px);
         opacity: 0;
     }
+
     to {
         transform: translateY(0);
         opacity: 1;
@@ -406,6 +413,7 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 12px;
     grid-auto-rows: 200px;
+    grid-auto-flow: dense;
 }
 
 @media (max-width: 768px) {
@@ -583,16 +591,22 @@ body {
 
 .full-view-image-container {
     width: 100%;
-    max-height: 400px;
-    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #000;
     border-radius: 12px 12px 0 0;
+    max-height: 60vh;
+    overflow: auto;
 }
 
 .full-view-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    max-width: 100%;
+    max-height: 60vh;
+    width: auto;
+    height: auto;
     display: block;
+    object-fit: contain;
 }
 
 .full-view-info {

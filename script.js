@@ -697,9 +697,20 @@ document.getElementById('create-account-btn').addEventListener('click', async ()
     }
 });
 
-// Gallery Navigation
-document.getElementById('gallery-btn').addEventListener('click', () => {
-    window.location.href = 'gallery.html';
+// Gallery Navigation - Handle both header and footer buttons
+const galleryBtns = document.querySelectorAll('#gallery-btn');
+galleryBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        window.location.href = 'gallery.html';
+    });
+});
+
+// Admin Panel Navigation - Handle both header and footer buttons
+const adminBtns = document.querySelectorAll('#admin-panel-btn');
+adminBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        window.location.href = 'admin.html';
+    });
 });
 
 document.getElementById('logout-btn').addEventListener('click', async () => {

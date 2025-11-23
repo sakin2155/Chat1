@@ -14,7 +14,7 @@ function initializeFirebase() {
         console.log('Firebase initialized from main app');
         return true;
     }
-    
+
     // If not available, initialize Firebase directly
     if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length > 0) {
         // Firebase SDK already loaded, use existing app
@@ -26,21 +26,21 @@ function initializeFirebase() {
         console.log('Firebase initialized from existing app');
         return true;
     }
-    
+
     return false;
 }
 
 // Try to initialize immediately
 if (!initializeFirebase()) {
-    // If not available, wait and retry
+    // If not available, wait and retry (max 10 attempts = 1 second, then fallback)
     let retries = 0;
     const retryInterval = setInterval(() => {
         retries++;
         if (initializeFirebase()) {
             clearInterval(retryInterval);
-        } else if (retries > 15) {
+        } else if (retries > 10) {
             clearInterval(retryInterval);
-            console.error('Firebase not initialized. Attempting fallback initialization...');
+            console.log('Using fallback Firebase initialization...');
             // Fallback: Initialize Firebase with config
             if (typeof firebase !== 'undefined') {
                 const firebaseConfig = {
@@ -63,7 +63,7 @@ if (!initializeFirebase()) {
                 }
             }
         }
-    }, 300);
+    }, 100);
 }
 
 // ===========================
@@ -123,26 +123,26 @@ let authCheckTimeout = null;
 
 function setupAuthListener() {
     if (!auth || !firebaseReady) {
-        // Firebase not ready yet, try again
-        console.log('Waiting for Firebase to be ready...');
+        // Firebase not ready yet, try again (but don't log repeatedly)
         setTimeout(setupAuthListener, 300);
         return;
     }
-    
+
     console.log('Setting up auth listener');
-    
+
     auth.onAuthStateChanged(async (user) => {
         // Clear any pending redirects
         if (authCheckTimeout) {
             clearTimeout(authCheckTimeout);
         }
-        
+
         if (user) {
             console.log('User authenticated:', user.uid);
             currentUser = user;
             try {
                 await loadCurrentUserData();
-                await loadGallery();
+                // Load gallery immediately without waiting
+                loadGallery();
             } catch (error) {
                 console.error('Error loading gallery:', error);
             }
@@ -157,12 +157,17 @@ function setupAuthListener() {
     });
 }
 
-// Setup auth listener when page loads
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupAuthListener);
-} else {
-    setupAuthListener();
+// Setup auth listener when Firebase is ready
+function waitForFirebaseAndSetupAuth() {
+    if (firebaseReady && auth) {
+        setupAuthListener();
+    } else {
+        setTimeout(waitForFirebaseAndSetupAuth, 50);
+    }
 }
+
+// Start waiting for Firebase immediately
+waitForFirebaseAndSetupAuth();
 
 async function loadCurrentUserData() {
     try {
@@ -307,9 +312,9 @@ shareBtn.addEventListener('click', async () => {
                         uploadedBy: currentUser.uid,
                         uploaderName: currentUserData?.displayName || 'Unknown',
                         uploaderAvatar: currentUserData?.photoURL || '',
-                        uploadedAt: firebase.firestore.FieldValue.serverTimestamp ? 
-                                   firebase.firestore.FieldValue.serverTimestamp() : 
-                                   new Date(),
+                        uploadedAt: firebase.firestore.FieldValue.serverTimestamp ?
+                            firebase.firestore.FieldValue.serverTimestamp() :
+                            new Date(),
                         likes: 0,
                         likedBy: []
                     });
@@ -435,6 +440,23 @@ function renderGalleryItem(imageData) {
     const img = document.createElement('img');
     img.src = imageData.imageUrl;
     img.alt = imageData.title;
+    
+    // Load image to get natural dimensions for aspect ratio
+    img.onload = function() {
+        const aspectRatio = this.naturalWidth / this.naturalHeight;
+        
+        // Set grid row span based on aspect ratio
+        if (aspectRatio > 1.5) {
+            // Wide image - span 1 row
+            item.style.gridRowEnd = 'span 1';
+        } else if (aspectRatio > 0.8) {
+            // Square-ish - span 1 row
+            item.style.gridRowEnd = 'span 1';
+        } else {
+            // Tall image - span 2 rows
+            item.style.gridRowEnd = 'span 2';
+        }
+    };
 
     const overlay = document.createElement('div');
     overlay.className = 'gallery-item-overlay';
@@ -515,58 +537,125 @@ fullViewModal.addEventListener('click', (e) => {
 // ===========================
 // Like Functionality
 // ===========================
-likeBtn.addEventListener('click', async () => {
-    if (!currentViewingImageId) return;
-
-    try {
-        const imageDoc = await db.collection('gallery').doc(currentViewingImageId).get();
-        const imageData = imageDoc.data();
-
-        const likedBy = imageData.likedBy || [];
-        const hasLiked = likedBy.includes(currentUser.uid);
-
-        if (hasLiked) {
-            // Unlike
-            await db.collection('gallery').doc(currentViewingImageId).update({
-                likes: Math.max(0, (imageData.likes || 0) - 1),
-                likedBy: likedBy.filter(uid => uid !== currentUser.uid)
-            });
-            likeBtn.classList.remove('liked');
-            likeCount.textContent = Math.max(0, (imageData.likes || 0) - 1);
-        } else {
-            // Like
-            await db.collection('gallery').doc(currentViewingImageId).update({
-                likes: (imageData.likes || 0) + 1,
-                likedBy: [...likedBy, currentUser.uid]
-            });
-            likeBtn.classList.add('liked');
-            likeCount.textContent = (imageData.likes || 0) + 1;
+if (likeBtn) {
+    likeBtn.addEventListener('click', async () => {
+        if (!currentViewingImageId) {
+            console.error('No image selected');
+            return;
         }
-    } catch (error) {
-        console.error('Error updating like:', error);
+
+        if (!currentUser) {
+            console.error('User not authenticated');
+            return;
+        }
+
+        if (!db) {
+            console.error('Database not initialized');
+            return;
+        }
+
+        try {
+            likeBtn.disabled = true;
+            const imageDoc = await db.collection('gallery').doc(currentViewingImageId).get();
+            
+            if (!imageDoc.exists) {
+                console.error('Image not found');
+                likeBtn.disabled = false;
+                return;
+            }
+
+            const imageData = imageDoc.data();
+            const likedBy = imageData.likedBy || [];
+            const hasLiked = likedBy.includes(currentUser.uid);
+
+            if (hasLiked) {
+                // Unlike
+                await db.collection('gallery').doc(currentViewingImageId).update({
+                    likes: Math.max(0, (imageData.likes || 0) - 1),
+                    likedBy: likedBy.filter(uid => uid !== currentUser.uid)
+                });
+                likeBtn.classList.remove('liked');
+                const newCount = Math.max(0, (imageData.likes || 0) - 1);
+                likeCount.textContent = newCount;
+                updateGalleryItemLikes(currentViewingImageId, newCount);
+            } else {
+                // Like
+                await db.collection('gallery').doc(currentViewingImageId).update({
+                    likes: (imageData.likes || 0) + 1,
+                    likedBy: [...likedBy, currentUser.uid]
+                });
+                likeBtn.classList.add('liked');
+                const newCount = (imageData.likes || 0) + 1;
+                likeCount.textContent = newCount;
+                updateGalleryItemLikes(currentViewingImageId, newCount);
+            }
+        } catch (error) {
+            console.error('Error updating like:', error);
+            alert('Failed to update like. Please try again.');
+        } finally {
+            likeBtn.disabled = false;
+        }
+    });
+}
+
+function updateGalleryItemLikes(imageId, newCount) {
+    const galleryItem = galleryGrid.querySelector(`[data-image-id="${imageId}"]`);
+    if (galleryItem) {
+        const likesElement = galleryItem.querySelector('.gallery-item-likes');
+        if (likesElement) {
+            likesElement.innerHTML = `❤️ ${newCount}`;
+        }
     }
-});
+}
 
 // ===========================
 // Download Functionality
 // ===========================
-downloadBtn.addEventListener('click', async () => {
-    if (!currentViewingImageId) return;
+if (downloadBtn) {
+    downloadBtn.addEventListener('click', async () => {
+        if (!currentViewingImageId) {
+            console.error('No image selected');
+            return;
+        }
 
-    try {
-        const imageDoc = await db.collection('gallery').doc(currentViewingImageId).get();
-        const imageData = imageDoc.data();
+        if (!db) {
+            console.error('Database not initialized');
+            return;
+        }
 
-        const link = document.createElement('a');
-        link.href = imageData.imageUrl;
-        link.download = `${imageData.title || 'image'}.jpg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    } catch (error) {
-        console.error('Error downloading image:', error);
-    }
-});
+        try {
+            downloadBtn.disabled = true;
+            const imageDoc = await db.collection('gallery').doc(currentViewingImageId).get();
+            
+            if (!imageDoc.exists) {
+                console.error('Image not found');
+                downloadBtn.disabled = false;
+                return;
+            }
+
+            const imageData = imageDoc.data();
+
+            // For Cloudinary URLs, add download parameter
+            let downloadUrl = imageData.imageUrl;
+            if (downloadUrl.includes('cloudinary')) {
+                downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
+            }
+
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `${imageData.title || 'image'}.jpg`;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (error) {
+            console.error('Error downloading image:', error);
+            alert('Failed to download image. Please try again.');
+        } finally {
+            downloadBtn.disabled = false;
+        }
+    });
+}
 
 // ===========================
 // Infinite Scroll

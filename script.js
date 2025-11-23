@@ -821,6 +821,14 @@ function getInitials(name) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 }
 
+function isSingleEmojiString(str) {
+    if (!str) return false;
+    // Regex to match a single Unicode emoji (including surrogate pairs and variation selectors)
+    // This regex ensures the string contains ONLY one emoji and nothing else
+    const emojiRegex = /^(\p{Extended_Pictographic}|\p{Emoji_Presentation})$/u;
+    return emojiRegex.test(str);
+}
+
 function isImageUrl(value) {
     return typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:image'));
 }
@@ -1234,8 +1242,11 @@ function createMessageElement(messageData) {
     const isVoiceMessage = !isDeleted && messageData.type === 'voice';
     const isStickerOrGif = !isDeleted && (messageData.type === 'sticker' || messageData.type === 'gif');
 
+    // Check for single emoji
+    const isSingleEmoji = !isDeleted && !isSystemMessage && !isGameInvite && !isVoiceMessage && !isStickerOrGif && messageData.text && isSingleEmojiString(messageData.text);
+
     const div = document.createElement('div');
-    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}`;
+    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}${isSingleEmoji ? ' supersized-emoji' : ''}`;
     div.dataset.messageId = messageData.id;
     div.dataset.messageType = messageData.type || 'text';
     // Store timestamp in milliseconds for proper sorting
@@ -1324,7 +1335,7 @@ function createMessageElement(messageData) {
     if (!isDeleted && messageData.replyTo && !isStickerOrGif) {
         const replyName = messageData.replyTo.senderName || 'Unknown';
         const replyPreviewData = getMessagePreviewData(messageData.replyTo);
-        
+
         let mediaPreviewHtml = '';
         if (replyPreviewData.mediaUrl) {
             mediaPreviewHtml = `
@@ -1333,7 +1344,7 @@ function createMessageElement(messageData) {
                 </div>
             `;
         }
-        
+
         replyHtml = `
             <div class="message-reply-context" data-reply-to="${messageData.replyTo.messageId}" role="button" tabindex="0" title="Jump to message">
                 ${mediaPreviewHtml}
@@ -1434,6 +1445,11 @@ function createMessageElement(messageData) {
                     // Only set up long-press timer
                     longPressTimer = setTimeout(() => {
                         showMessageOptions(e.touches[0], messageData.id);
+                        // Ensure input stays focused if it was focused
+                        if (document.activeElement === messageInput) {
+                            // Prevent keyboard dismissal
+                            e.preventDefault();
+                        }
                     }, 400);
                 });
 
@@ -1532,10 +1548,10 @@ function createMessageElement(messageData) {
                 if (target) {
                     // Smooth scroll to the source message
                     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    
+
                     // Add highlight animation
                     target.classList.add('highlight-replied');
-                    
+
                     // Remove highlight after animation completes
                     setTimeout(() => target.classList.remove('highlight-replied'), 1500);
                 } else {
@@ -1543,10 +1559,10 @@ function createMessageElement(messageData) {
                     console.warn('Source message not found:', toId);
                 }
             };
-            
+
             // Click handler
             replyCtx.addEventListener('click', jumpToSource);
-            
+
             // Keyboard support (Enter and Space)
             replyCtx.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -1585,7 +1601,7 @@ function createMessageElement(messageData) {
                         try {
                             // Mark the game invite as started/expired in Firestore
                             const messageRef = doc(db, 'chats', currentChatId, 'messages', messageData.id);
-                            await updateDoc(messageRef, { 
+                            await updateDoc(messageRef, {
                                 gameStarted: true,
                                 joinedAt: serverTimestamp()
                             });
@@ -3199,7 +3215,11 @@ if (messageInput) {
         }, 300); // Wait for keyboard animation
     });
 
-    messageInput.addEventListener('input', () => {
+    messageInput.addEventListener('input', function () {
+        // Auto-resize logic
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+
         // Only scroll when typing a new message, not when editing
         if (!editingMessageId) {
             scrollToBottom(false);
@@ -3246,9 +3266,8 @@ function focusInputAndKeepKeyboard() {
 sendBtn.addEventListener('click', (e) => {
     e.preventDefault();
     // Don't let the button steal focus from input
-    if (isMobileDevice()) {
-        messageInput.focus();
-    }
+    // Crucial for mobile keyboard persistence
+    messageInput.focus();
     sendMessage();
 });
 
@@ -3358,7 +3377,7 @@ async function deleteMediaFromCloudinary(mediaUrl) {
         // URL format: https://res.cloudinary.com/{cloud_name}/image/upload/v{version}/{public_id}
         const urlParts = mediaUrl.split('/');
         const versionIndex = urlParts.findIndex(part => part.startsWith('v'));
-        
+
         if (versionIndex === -1) {
             console.warn('Could not extract public_id from URL:', mediaUrl);
             return;
@@ -4447,7 +4466,7 @@ async function showMessageOptions(event, messageId) {
 
     messageOptions.classList.remove('hidden');
     isContextMenuOpen = true;
-    
+
     // Keep keyboard open on mobile when menu appears
     // Focus immediately and prevent any blur events
     if (isMobileDevice()) {
@@ -4688,7 +4707,7 @@ function closeNotificationsModal() {
 
 function renderNotifications() {
     console.log('Rendering notifications:', userNotifications.length);
-    
+
     if (userNotifications.length === 0) {
         notificationsList.innerHTML = '<div class="notifications-empty">No notifications yet</div>';
         return;
@@ -4706,17 +4725,17 @@ function renderNotifications() {
         } else {
             timestamp = new Date();
         }
-        
+
         const timeAgo = getTimeAgo(timestamp);
         const isUnread = !notification.read;
-        
+
         // Calculate deletion time for read notifications
         let deletionInfo = '';
         if (notification.read && notification.readAt) {
             const readTime = notification.readAt.toDate?.() || new Date(notification.readAt);
             const now = new Date();
             const hoursUntilDelete = 24 - Math.floor((now - readTime) / 3600000);
-            
+
             if (hoursUntilDelete > 0) {
                 deletionInfo = `<div class="notification-deletion-info">Will delete in ${hoursUntilDelete}h</div>`;
             }
@@ -4742,7 +4761,7 @@ function renderNotifications() {
 async function markNotificationsAsRead() {
     try {
         const unreadNotifications = userNotifications.filter(n => !n.read);
-        
+
         for (const notification of unreadNotifications) {
             const notifRef = doc(db, 'notifications', notification.id);
             await updateDoc(notifRef, {
@@ -4770,7 +4789,7 @@ async function cleanupOldNotifications() {
             // 2. readAt timestamp exists and is older than 24 hours
             if (notification.read && notification.readAt) {
                 const readTime = notification.readAt.toDate?.() || new Date(notification.readAt);
-                
+
                 if (readTime < twentyFourHoursAgo) {
                     const notifRef = doc(db, 'notifications', notification.id);
                     await deleteDoc(notifRef);
@@ -4797,7 +4816,7 @@ function getTimeAgo(date) {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    
+
     return date.toLocaleDateString();
 }
 

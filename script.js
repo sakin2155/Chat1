@@ -4286,12 +4286,26 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// Also handle touch events outside to close menu and remove blur listener
+document.addEventListener('touchstart', (e) => {
+    // If menu is open and touch is outside menu and input
+    if (isContextMenuOpen && !messageOptions.contains(e.target) && !e.target.closest('.message-options-trigger') && e.target !== messageInput) {
+        messageOptions.classList.add('hidden');
+        isContextMenuOpen = false;
+        // Remove blur listener when menu closes
+        if (isMobileDevice()) {
+            messageInput.removeEventListener('blur', preventBlurWhileMenuOpen);
+        }
+    }
+}, true);
+
 // ===========================
 // Keyboard Management for Context Menu
 // ===========================
 function preventBlurWhileMenuOpen(e) {
     // Prevent blur event while context menu is open
-    if (isContextMenuOpen) {
+    // Check both the flag AND that the menu is actually visible
+    if (isContextMenuOpen && !messageOptions.classList.contains('hidden')) {
         e.preventDefault();
         messageInput.focus();
     }

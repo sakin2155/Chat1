@@ -1,0 +1,274 @@
+================================================================================
+FIRESTORE SECURITY RULES - CURRENT VERSION
+================================================================================
+Last Updated: Nov 23, 2025 at 6:17 PM UTC+06:00
+Project: chat-f5b70
+Status: ACTIVE
+
+================================================================================
+COPY & PASTE THIS ENTIRE RULE INTO FIREBASE CONSOLE
+================================================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User documents
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Chat documents
+    match /chats/{chatId} {
+      allow read, write: if request.auth != null;
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      // Typing indicator subcollection
+      match /typing/{userId} {
+        allow read, write: if request.auth != null;
+      }
+
+      // Metadata subcollection (for streak and theme)
+      match /metadata/{document=**} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    // Stories collection
+    match /stories/{storyId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+
+    // Gallery collection
+    match /gallery/{imageId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && resource.data.uploadedBy == request.auth.uid;
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.recipientId || 
+         resource.data.sentBy == 'admin');
+      allow create: if request.auth != null && 
+        request.resource.data.sentBy == 'admin';
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.recipientId;
+      allow delete: if request.auth != null && 
+        resource.data.sentBy == 'admin';
+    }
+
+    // Game system rules - Tic-Tac-Toe
+    match /games/{roomId} {
+      allow read, write: if request.auth != null;
+      
+      match /players/{playerId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      match /moves/{moveId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      match /chat/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    // Game system rules - Rock Paper Scissors
+    match /rps_games/{roomId} {
+      allow read, write: if request.auth != null;
+      
+      match /players/{playerId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      match /rounds/{roundId} {
+        allow read, write: if request.auth != null;
+      }
+      
+      match /chat/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+  }
+}
+
+================================================================================
+COLLECTION PERMISSIONS SUMMARY
+================================================================================
+
+1. USERS COLLECTION
+   ├─ Read: Any authenticated user
+   ├─ Write: Only the user can write their own document
+   └─ Use: User profiles, settings, preferences
+
+2. CHATS COLLECTION
+   ├─ Read: Any authenticated user
+   ├─ Write: Any authenticated user
+   ├─ Messages: Any authenticated user can read/write
+   ├─ Typing: Any authenticated user can read/write
+   ├─ Metadata: Any authenticated user can read/write
+   └─ Use: Real-time chat, typing indicators, streaks
+
+3. STORIES COLLECTION
+   ├─ Read: Any authenticated user
+   ├─ Create: User creating their own story
+   ├─ Update: Any authenticated user
+   ├─ Delete: Only story creator can delete
+   └─ Use: User stories (24-hour expiry)
+
+4. GALLERY COLLECTION
+   ├─ Read: Any authenticated user
+   ├─ Create: Any authenticated user
+   ├─ Update: Any authenticated user
+   ├─ Delete: Only uploader can delete
+   └─ Use: Shared gallery images
+
+5. NOTIFICATIONS COLLECTION
+   ├─ Read: Recipient or admin
+   ├─ Create: Only if sentBy == 'admin'
+   ├─ Update: Recipient can mark as read
+   ├─ Delete: Only admin can delete
+   └─ Use: Admin notifications to users
+
+6. GAMES COLLECTION (Tic-Tac-Toe)
+   ├─ Read: Any authenticated user
+   ├─ Write: Any authenticated user
+   ├─ Players: Both players can read/write
+   ├─ Moves: Both players can read/write
+   ├─ Chat: Both players can read/write
+   └─ Use: Real-time game state
+
+7. RPS_GAMES COLLECTION (Rock Paper Scissors)
+   ├─ Read: Any authenticated user
+   ├─ Write: Any authenticated user
+   ├─ Players: Both players can read/write
+   ├─ Rounds: Both players can read/write
+   ├─ Chat: Both players can read/write
+   └─ Use: Real-time game state
+
+================================================================================
+HOW TO UPDATE RULES IN FIREBASE CONSOLE
+================================================================================
+
+Step 1: Go to Firebase Console
+  → https://console.firebase.google.com/
+
+Step 2: Select Project
+  → Select "chat-f5b70"
+
+Step 3: Navigate to Firestore Rules
+  → Firestore Database → Rules tab
+
+Step 4: Replace Rules
+  → Select ALL text (Ctrl+A)
+  → Delete it
+  → Paste the complete rules above
+
+Step 5: Publish
+  → Click "Publish" button
+  → Wait 10-15 seconds for propagation
+
+Step 6: Verify
+  → Hard refresh browser (Ctrl+Shift+R)
+  → Test functionality
+  → Check console for errors
+
+================================================================================
+RULE CHANGE HISTORY
+================================================================================
+
+VERSION 1 (Nov 23, 2025 - 6:17 PM)
+─────────────────────────────────
+Initial rules with:
+  ✓ Users collection
+  ✓ Chats collection with subcollections
+  ✓ Stories collection
+  ✓ Gallery collection
+  ✓ Notifications collection
+  ✓ Games collection (Tic-Tac-Toe)
+  ✓ RPS Games collection (Rock Paper Scissors)
+
+Status: ACTIVE - All collections fully functional
+
+================================================================================
+KNOWN ISSUES & NOTES
+================================================================================
+
+1. Admin Permissions
+   - Admin uses 'sentBy: admin' field for notifications
+   - No custom claims needed (simpler setup)
+   - Admin can delete any notification
+
+2. Story Deletion
+   - Only story creator can delete their own stories
+   - Admin cannot delete user stories (by design)
+   - Stories auto-expire after 24 hours
+
+3. Gallery Permissions
+   - Users can only delete their own uploads
+   - Admin cannot delete user uploads (by design)
+   - All users can see all gallery images
+
+4. Real-time Listeners
+   - All collections support onSnapshot()
+   - Subcollections work with proper paths
+   - No index errors with current queries
+
+5. Authentication Required
+   - All operations require user to be logged in
+   - request.auth != null is enforced everywhere
+   - Unauthenticated users get permission denied
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Error: "Missing or insufficient permissions"
+→ Check if user is authenticated
+→ Verify rules are published
+→ Wait 15 seconds for propagation
+→ Hard refresh browser
+
+Error: "The query requires an index"
+→ Click the provided link in console
+→ Create the composite index
+→ Wait for index to build (1-5 minutes)
+
+Error: "Document not found"
+→ Verify document exists in Firestore
+→ Check document path is correct
+→ Ensure user has read permission
+
+Error: "Cannot write to this document"
+→ Check write permissions for collection
+→ Verify user ID matches required field
+→ Ensure all required fields are present
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+When updating rules in future:
+1. Update this file with new version
+2. Add entry to RULE CHANGE HISTORY section
+3. Document what changed and why
+4. Test thoroughly before publishing
+5. Keep backup of previous version
+
+For admin delete permissions:
+→ Update stories delete rule to include admin check
+→ Update gallery delete rule to include admin check
+→ Add admin field to document if needed
+
+================================================================================

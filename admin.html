@@ -25,6 +25,7 @@
                         type="password" 
                         id="passwordInput" 
                         placeholder="Enter admin password" 
+                        autocomplete="current-password"
                         required
                     >
                     <button type="button" class="password-toggle" id="passwordToggle" title="Show/Hide">
@@ -91,6 +92,13 @@
                         <line x1="12" y1="12" x2="4" y2="7.5"></line>
                     </svg>
                     <span>Infrastructure</span>
+                </button>
+                <button class="nav-item" data-section="notifications">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span>Notifications</span>
                 </button>
             </nav>
 
@@ -279,6 +287,41 @@
                                     <div class="progress-fill" id="storageProgress"></div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Notifications Section -->
+                <section class="section" id="notificationsSection">
+                    <h2>Send Notifications</h2>
+                    
+                    <div class="notifications-sender-form">
+                        <div id="notificationToast" class="notification-toast hidden"></div>
+                        
+                        <div class="form-group">
+                            <label for="notificationRecipient">Select Recipient User</label>
+                            <select id="notificationRecipient" class="form-control">
+                                <option value="">-- Choose a user --</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="notificationTitle">Notification Title</label>
+                            <input type="text" id="notificationTitle" class="form-control" placeholder="e.g., System Update" maxlength="100">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="notificationMessage">Notification Message</label>
+                            <textarea id="notificationMessage" class="form-control" placeholder="Enter your notification message..." rows="4" maxlength="500"></textarea>
+                        </div>
+
+                        <button id="sendNotificationBtn" class="btn btn-primary">Send Notification</button>
+                    </div>
+
+                    <div class="notifications-history">
+                        <h3>Sent Notifications</h3>
+                        <div id="notificationsHistoryList" class="notifications-history-list">
+                            <p class="empty-state">No notifications sent yet</p>
                         </div>
                     </div>
                 </section>

@@ -176,7 +176,8 @@ async function loadDashboardData() {
         await Promise.all([
             loadUsers(),
             loadMedia(),
-            loadInfrastructureData()
+            loadInfrastructureData(),
+            initializeNotificationsAdmin()
         ]);
     } catch (error) {
         console.error('Error loading dashboard data:', error);
@@ -654,6 +655,227 @@ async function loadInfrastructureData() {
     } catch (error) {
         console.error('Error loading infrastructure data:', error);
     }
+}
+
+// ===========================
+// Notifications Admin
+// ===========================
+let sentNotifications = [];
+
+async function initializeNotificationsAdmin() {
+    try {
+        // Load users for recipient dropdown
+        const usersSnapshot = await db.collection('users').get();
+        const recipientSelect = document.getElementById('notificationRecipient');
+        
+        usersSnapshot.forEach(doc => {
+            const user = doc.data();
+            const option = document.createElement('option');
+            option.value = doc.id;
+            option.textContent = user.displayName || user.email;
+            recipientSelect.appendChild(option);
+        });
+
+        // Set up send button listener
+        document.getElementById('sendNotificationBtn').addEventListener('click', sendNotification);
+
+        // Load notification history (gracefully handle errors)
+        try {
+            loadNotificationHistory();
+        } catch (historyError) {
+            console.warn('Could not load notification history (Firestore rules may not be configured):', historyError);
+            document.getElementById('notificationsHistoryList').innerHTML = '<p class="empty-state">Firestore rules need to be updated. See console for details.</p>';
+        }
+    } catch (error) {
+        console.error('Error initializing notifications admin:', error);
+        console.warn('Notifications feature requires Firestore rules update. See memory for details.');
+    }
+}
+
+async function sendNotification() {
+    try {
+        const recipientId = document.getElementById('notificationRecipient').value;
+        const title = document.getElementById('notificationTitle').value.trim();
+        const message = document.getElementById('notificationMessage').value.trim();
+
+        if (!recipientId) {
+            alert('Please select a recipient');
+            return;
+        }
+
+        if (!title) {
+            alert('Please enter a notification title');
+            return;
+        }
+
+        if (!message) {
+            alert('Please enter a notification message');
+            return;
+        }
+
+        // Disable button during send
+        const sendBtn = document.getElementById('sendNotificationBtn');
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending...';
+
+        // Create notification in Firestore
+        const notificationRef = await db.collection('notifications').add({
+            recipientId: recipientId,
+            title: title,
+            message: message,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            read: false,
+            readAt: null,
+            sentBy: 'admin',
+            senderUid: auth.currentUser?.uid || 'admin'
+        });
+
+        // Add to sent notifications list
+        sentNotifications.unshift({
+            id: notificationRef.id,
+            recipientId: recipientId,
+            title: title,
+            message: message,
+            timestamp: new Date(),
+            read: false
+        });
+
+        // Clear form
+        document.getElementById('notificationTitle').value = '';
+        document.getElementById('notificationMessage').value = '';
+        document.getElementById('notificationRecipient').value = '';
+
+        // Update history display
+        renderNotificationHistory();
+
+        // Re-enable button
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send Notification';
+
+        // Show success toast
+        showNotificationToast('Notification sent successfully!', 'success');
+    } catch (error) {
+        console.error('Error sending notification:', error);
+        let errorMsg = error.message;
+        if (error.message.includes('Missing or insufficient permissions')) {
+            errorMsg = 'Firestore rules not configured. Please update rules in Firebase Console.';
+            console.log('REQUIRED: Update Firestore rules. Check the memory for complete rules to copy/paste.');
+        }
+        // Show error toast
+        showNotificationToast('Error: ' + errorMsg, 'error');
+        document.getElementById('sendNotificationBtn').disabled = false;
+        document.getElementById('sendNotificationBtn').textContent = 'Send Notification';
+    }
+}
+
+function showNotificationToast(message, type = 'success') {
+    const toastContainer = document.getElementById('notificationToast');
+    if (!toastContainer) return;
+
+    // Determine icon based on type
+    let icon = '✓';
+    if (type === 'error') icon = '✕';
+    if (type === 'info') icon = 'ℹ';
+
+    // Set content
+    toastContainer.innerHTML = `
+        <div class="notification-toast-icon">${icon}</div>
+        <div class="notification-toast-message">${escapeHtml(message)}</div>
+    `;
+
+    // Remove hidden class and add type class
+    toastContainer.classList.remove('hidden');
+    toastContainer.className = `notification-toast ${type}`;
+
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+        toastContainer.classList.add('hidden');
+    }, 4000);
+}
+
+async function loadNotificationHistory() {
+    try {
+        // Set up real-time listener for notification history (without orderBy to avoid index)
+        db.collection('notifications')
+            .where('sentBy', '==', 'admin')
+            .limit(50)
+            .onSnapshot((snapshot) => {
+                sentNotifications = [];
+                snapshot.forEach(doc => {
+                    sentNotifications.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+                
+                // Sort by timestamp in JavaScript (newest first)
+                sentNotifications.sort((a, b) => {
+                    const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp) || 0;
+                    const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp) || 0;
+                    return timeB - timeA;
+                });
+                
+                console.log('Notification history loaded:', sentNotifications.length);
+                renderNotificationHistory();
+            }, (error) => {
+                console.error('Error listening to notification history:', error);
+                // If listener fails, show message to user
+                document.getElementById('notificationsHistoryList').innerHTML = '<p class="empty-state">Unable to load notification history. Check Firestore rules.</p>';
+            });
+    } catch (error) {
+        console.error('Error setting up notification history listener:', error);
+    }
+}
+
+function renderNotificationHistory() {
+    const historyList = document.getElementById('notificationsHistoryList');
+
+    if (sentNotifications.length === 0) {
+        historyList.innerHTML = '<p class="empty-state">No notifications sent yet</p>';
+        return;
+    }
+
+    historyList.innerHTML = sentNotifications.map(notif => {
+        const timestamp = notif.timestamp?.toDate?.() || new Date(notif.timestamp);
+        const timeAgo = getTimeAgoAdmin(timestamp);
+        const statusClass = notif.read ? 'read' : 'pending';
+        const statusText = notif.read ? '✓ Seen' : '⏱ Pending';
+
+        return `
+            <div class="notification-history-item">
+                <div class="notification-history-content">
+                    <div class="notification-history-title">${escapeHtml(notif.title)}</div>
+                    <div class="notification-history-recipient">To: ${notif.recipientId}</div>
+                    <div class="notification-history-message">${escapeHtml(notif.message)}</div>
+                </div>
+                <div class="notification-history-status ${statusClass}">
+                    <span class="notification-status-icon"></span>
+                    <span>${statusText}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getTimeAgoAdmin(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ===========================

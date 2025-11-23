@@ -39,7 +39,28 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
       allow update: if request.auth != null;
-      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.userId || request.auth.token.admin == true);
+    }
+
+    // Gallery collection
+    match /gallery/{imageId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && (resource.data.uploadedBy == request.auth.uid || request.auth.token.admin == true);
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.recipientId || 
+         resource.data.sentBy == 'admin');
+      allow create: if request.auth != null && 
+        request.resource.data.sentBy == 'admin';
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.recipientId;
+      allow delete: if request.auth != null && 
+        resource.data.sentBy == 'admin';
     }
 
     // Game system rules - Tic-Tac-Toe

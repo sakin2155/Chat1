@@ -121,6 +121,9 @@ let gifHasMore = true;
 let customStickers = [];
 let streakData = new Map(); // Store streaks: chatId -> { count, lastMessageDate, lastMessageFrom }
 let streakCheckInterval = null;
+let userNotifications = []; // Store notifications for current user
+let unsubscribeNotifications = null; // Firestore listener for notifications
+let notificationsUnreadCount = 0; // Track unread notification count
 
 // ===========================
 // Auto-scroll Helper
@@ -254,6 +257,12 @@ const customStickerSection = document.getElementById('custom-sticker-section');
 const stickerFileInput = document.getElementById('sticker-file-input');
 const streakBadge = document.getElementById('streak-badge');
 const streakCount = document.getElementById('streak-count');
+const notificationsBtn = document.getElementById('notifications-btn');
+const notificationsBadge = document.getElementById('notifications-badge');
+const notificationsModal = document.getElementById('notifications-modal');
+const notificationsList = document.getElementById('notifications-list');
+const closeNotificationsBtn = document.getElementById('close-notifications');
+const notificationsBackdrop = document.querySelector('.notifications-backdrop');
 
 // ===========================
 // Performance Optimizations
@@ -777,6 +786,7 @@ onAuthStateChanged(auth, async (user) => {
             listenToCurrentUser(user.uid);
             subscribeToStories();
             loadCustomStickers(user.uid);
+            initializeNotificationSystem();
         } else {
             stopPresenceTracking();
             if (unsubscribeCurrentUser) {
@@ -994,14 +1004,40 @@ function getMessagePreviewText(messageData) {
         return '[Sent a GIF]';
     } else if (messageData.type === 'image') {
         return '[Sent an Image]';
+    } else if (messageData.type === 'voice') {
+        return '[Sent a Voice Message]';
     } else if (messageData.text) {
-        // Truncate text to 20 characters for preview
-        return messageData.text.length > 20
-            ? messageData.text.substring(0, 20) + '...'
+        // Truncate text to 50 characters for preview
+        return messageData.text.length > 50
+            ? messageData.text.substring(0, 50) + '...'
             : messageData.text;
     }
 
     return '[Message]';
+}
+
+function getMessagePreviewData(messageData) {
+    // Returns an object with type, text, and mediaUrl for rich preview rendering
+    if (messageData.isDeleted) {
+        return { type: 'deleted', text: 'This message was deleted', mediaUrl: null };
+    }
+
+    if (messageData.type === 'sticker') {
+        return { type: 'sticker', text: 'Sticker', mediaUrl: messageData.imgUrl };
+    } else if (messageData.type === 'gif') {
+        return { type: 'gif', text: 'GIF', mediaUrl: messageData.imgUrl };
+    } else if (messageData.type === 'image') {
+        return { type: 'image', text: 'Image', mediaUrl: messageData.imgUrl };
+    } else if (messageData.type === 'voice') {
+        return { type: 'voice', text: 'Voice Message', mediaUrl: null };
+    } else if (messageData.text) {
+        const truncated = messageData.text.length > 50
+            ? messageData.text.substring(0, 50) + '...'
+            : messageData.text;
+        return { type: 'text', text: truncated, mediaUrl: null };
+    }
+
+    return { type: 'text', text: '[Message]', mediaUrl: null };
 }
 
 function loadLatestMessagePreview(otherUserId, userItemEl) {
@@ -1287,11 +1323,24 @@ function createMessageElement(messageData) {
     let replyHtml = '';
     if (!isDeleted && messageData.replyTo && !isStickerOrGif) {
         const replyName = messageData.replyTo.senderName || 'Unknown';
-        const replyText = messageData.replyTo.text || '[Image]';
+        const replyPreviewData = getMessagePreviewData(messageData.replyTo);
+        
+        let mediaPreviewHtml = '';
+        if (replyPreviewData.mediaUrl) {
+            mediaPreviewHtml = `
+                <div class="reply-context-media-preview">
+                    <img src="${replyPreviewData.mediaUrl}" alt="${replyPreviewData.text}" class="reply-media-thumbnail">
+                </div>
+            `;
+        }
+        
         replyHtml = `
-            <div class="message-reply-context" data-reply-to="${messageData.replyTo.messageId}">
-                <div class="reply-context-name">${escapeHtml(replyName)}</div>
-                <div class="reply-context-text">${escapeHtml(replyText)}</div>
+            <div class="message-reply-context" data-reply-to="${messageData.replyTo.messageId}" role="button" tabindex="0" title="Jump to message">
+                ${mediaPreviewHtml}
+                <div class="reply-context-content">
+                    <div class="reply-context-name">${escapeHtml(replyName)}</div>
+                    <div class="reply-context-text">${escapeHtml(replyPreviewData.text)}</div>
+                </div>
             </div>
         `;
     }
@@ -1381,9 +1430,8 @@ function createMessageElement(messageData) {
             } else {
                 // Show options menu for own messages (both text and media)
                 targetElement.addEventListener('touchstart', (e) => {
-                    // Prevent blur event immediately to keep keyboard open
-                    e.preventDefault();
-                    
+                    // Don't preventDefault here - touch-action: pan-y in CSS handles scrolling
+                    // Only set up long-press timer
                     longPressTimer = setTimeout(() => {
                         showMessageOptions(e.touches[0], messageData.id);
                     }, 400);
@@ -1478,13 +1526,32 @@ function createMessageElement(messageData) {
 
         const replyCtx = div.querySelector('.message-reply-context');
         if (replyCtx) {
-            replyCtx.addEventListener('click', () => {
+            const jumpToSource = () => {
                 const toId = replyCtx.getAttribute('data-reply-to');
                 const target = document.querySelector(`.message[data-message-id="${toId}"]`);
                 if (target) {
+                    // Smooth scroll to the source message
                     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Add highlight animation
                     target.classList.add('highlight-replied');
-                    setTimeout(() => target.classList.remove('highlight-replied'), 1200);
+                    
+                    // Remove highlight after animation completes
+                    setTimeout(() => target.classList.remove('highlight-replied'), 1500);
+                } else {
+                    // Message not found - could be deleted or not loaded
+                    console.warn('Source message not found:', toId);
+                }
+            };
+            
+            // Click handler
+            replyCtx.addEventListener('click', jumpToSource);
+            
+            // Keyboard support (Enter and Space)
+            replyCtx.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    jumpToSource();
                 }
             });
         }
@@ -4533,6 +4600,206 @@ document.querySelectorAll('.option-btn').forEach(btn => {
         }
     });
 });
+
+// ===========================
+// Notification System
+// ===========================
+
+function initializeNotificationSystem() {
+    if (!currentUser) return;
+
+    // Listen for real-time notifications
+    listenForNotifications();
+
+    // Set up notification button listeners
+    notificationsBtn.addEventListener('click', openNotificationsModal);
+    closeNotificationsBtn.addEventListener('click', closeNotificationsModal);
+    notificationsBackdrop.addEventListener('click', closeNotificationsModal);
+}
+
+function listenForNotifications() {
+    if (unsubscribeNotifications) {
+        unsubscribeNotifications();
+    }
+
+    try {
+        const notificationsRef = collection(db, 'notifications');
+        // Query without orderBy to avoid index requirement
+        const q = query(
+            notificationsRef,
+            where('recipientId', '==', currentUser.uid)
+        );
+
+        unsubscribeNotifications = onSnapshot(q, (snapshot) => {
+            userNotifications = [];
+            notificationsUnreadCount = 0;
+
+            snapshot.forEach((doc) => {
+                const notification = {
+                    id: doc.id,
+                    ...doc.data()
+                };
+                userNotifications.push(notification);
+                if (!notification.read) {
+                    notificationsUnreadCount++;
+                }
+            });
+
+            // Sort by timestamp in JavaScript (newest first)
+            userNotifications.sort((a, b) => {
+                const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp) || 0;
+                const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp) || 0;
+                return timeB - timeA;
+            });
+
+            console.log('Notifications updated:', userNotifications.length, 'unread:', notificationsUnreadCount);
+            console.log('Notifications data:', userNotifications);
+            updateNotificationsBadge();
+            // Re-render if modal is open
+            if (!notificationsModal.classList.contains('hidden')) {
+                renderNotifications();
+            }
+        }, (error) => {
+            console.error('Error listening to notifications:', error);
+        });
+    } catch (error) {
+        console.error('Error setting up notification listener:', error);
+    }
+}
+
+function updateNotificationsBadge() {
+    if (notificationsUnreadCount > 0) {
+        notificationsBadge.textContent = notificationsUnreadCount;
+        notificationsBadge.classList.remove('hidden');
+    } else {
+        notificationsBadge.classList.add('hidden');
+    }
+}
+
+function openNotificationsModal() {
+    notificationsModal.classList.remove('hidden');
+    renderNotifications();
+    markNotificationsAsRead();
+}
+
+function closeNotificationsModal() {
+    notificationsModal.classList.add('hidden');
+}
+
+function renderNotifications() {
+    console.log('Rendering notifications:', userNotifications.length);
+    
+    if (userNotifications.length === 0) {
+        notificationsList.innerHTML = '<div class="notifications-empty">No notifications yet</div>';
+        return;
+    }
+
+    notificationsList.innerHTML = userNotifications.map(notification => {
+        // Handle both Firestore Timestamp and regular Date objects
+        let timestamp;
+        if (notification.timestamp && typeof notification.timestamp.toDate === 'function') {
+            timestamp = notification.timestamp.toDate();
+        } else if (notification.timestamp instanceof Date) {
+            timestamp = notification.timestamp;
+        } else if (typeof notification.timestamp === 'number') {
+            timestamp = new Date(notification.timestamp);
+        } else {
+            timestamp = new Date();
+        }
+        
+        const timeAgo = getTimeAgo(timestamp);
+        const isUnread = !notification.read;
+        
+        // Calculate deletion time for read notifications
+        let deletionInfo = '';
+        if (notification.read && notification.readAt) {
+            const readTime = notification.readAt.toDate?.() || new Date(notification.readAt);
+            const now = new Date();
+            const hoursUntilDelete = 24 - Math.floor((now - readTime) / 3600000);
+            
+            if (hoursUntilDelete > 0) {
+                deletionInfo = `<div class="notification-deletion-info">Will delete in ${hoursUntilDelete}h</div>`;
+            }
+        }
+
+        return `
+            <div class="notification-item ${isUnread ? 'unread' : ''}">
+                <div class="notification-header">
+                    <div class="notification-title">${escapeHtml(notification.title || 'Notification')}</div>
+                    <div class="notification-time">${timeAgo}</div>
+                </div>
+                <div class="notification-content">${escapeHtml(notification.message)}</div>
+                <div class="notification-status ${isUnread ? '' : 'read'}">
+                    <span class="notification-status-dot"></span>
+                    <span>${isUnread ? 'Unread' : 'Seen'}</span>
+                </div>
+                ${deletionInfo}
+            </div>
+        `;
+    }).join('');
+}
+
+async function markNotificationsAsRead() {
+    try {
+        const unreadNotifications = userNotifications.filter(n => !n.read);
+        
+        for (const notification of unreadNotifications) {
+            const notifRef = doc(db, 'notifications', notification.id);
+            await updateDoc(notifRef, {
+                read: true,
+                readAt: serverTimestamp()
+            });
+        }
+
+        notificationsUnreadCount = 0;
+        updateNotificationsBadge();
+    } catch (error) {
+        console.error('Error marking notifications as read:', error);
+    }
+}
+
+// Auto-delete read notifications after 24 hours
+async function cleanupOldNotifications() {
+    try {
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+        for (const notification of userNotifications) {
+            // Only delete if:
+            // 1. Notification is marked as read
+            // 2. readAt timestamp exists and is older than 24 hours
+            if (notification.read && notification.readAt) {
+                const readTime = notification.readAt.toDate?.() || new Date(notification.readAt);
+                
+                if (readTime < twentyFourHoursAgo) {
+                    const notifRef = doc(db, 'notifications', notification.id);
+                    await deleteDoc(notifRef);
+                    console.log('Deleted old notification:', notification.id);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error cleaning up old notifications:', error);
+    }
+}
+
+// Run cleanup every hour
+setInterval(cleanupOldNotifications, 60 * 60 * 1000);
+
+function getTimeAgo(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString();
+}
 
 // ===========================
 // Initialize Games Launcher

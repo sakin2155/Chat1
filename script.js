@@ -3273,24 +3273,62 @@ function isMobileDevice() {
 
 function focusInputAndKeepKeyboard() {
     if (isMobileDevice()) {
-        // Don't blur - just keep focus on the input
-        // This prevents the keyboard from closing
-        messageInput.focus();
+        // Only restore focus if the user hasn't explicitly closed the keyboard
+        if (!isUserManuallyClosed) {
+            // Don't blur - just keep focus on the input
+            // This prevents the keyboard from closing
+            messageInput.focus();
 
-        // Scroll input into view with a slight delay to ensure keyboard is visible
-        setTimeout(() => {
-            messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 50);
+            // Scroll input into view with a slight delay to ensure keyboard is visible
+            setTimeout(() => {
+                messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 50);
+        }
     }
 }
 
 // ===========================
 // Send Message
 // ===========================
+// Flag to track if user explicitly closed the keyboard
+let isUserManuallyClosed = false;
+
+// Prevent keyboard from closing on mobile
+if (isMobileDevice()) {
+    messageInput.addEventListener('blur', (e) => {
+        // Keep keyboard open if context menu is open
+        if (isContextMenuOpen) {
+            // Don't set isUserManuallyClosed here
+            return;
+        }
+
+        // If we are sending a message (send button clicked), don't consider it manual close
+        // The send button handler will refocus
+
+        // Otherwise, assume user tapped outside to close
+        isUserManuallyClosed = true;
+    });
+
+    messageInput.addEventListener('focus', () => {
+        isUserManuallyClosed = false;
+    });
+}
+
+sendBtn.addEventListener('touchstart', (e) => {
+    // Prevent default touch behavior to avoid blur
+    e.preventDefault();
+    // Trigger click logic
+    sendBtn.click();
+});
+
 sendBtn.addEventListener('click', (e) => {
     e.preventDefault();
     // Don't let the button steal focus from input
     // Crucial for mobile keyboard persistence
+
+    // Reset manual close flag since user is interacting with chat controls
+    isUserManuallyClosed = false;
+
     messageInput.focus();
     sendMessage();
 });
@@ -3301,24 +3339,6 @@ messageInput.addEventListener('keypress', (e) => {
     // Users must click send button to send message
 });
 
-// Prevent keyboard from closing on mobile
-if (isMobileDevice()) {
-    messageInput.addEventListener('blur', (e) => {
-        // Keep keyboard open if context menu is open
-        if (isContextMenuOpen) {
-            setTimeout(() => {
-                messageInput.focus();
-            }, 50);
-            return;
-        }
-        // Only allow blur if user explicitly taps outside
-        // Check if the blur is from sending message or other UI interaction
-        if (document.activeElement !== messageInput) {
-            // User tapped outside, allow blur
-            return;
-        }
-    });
-}
 
 async function sendMessage() {
     const rawText = messageInput.value;

@@ -1482,6 +1482,11 @@ function createMessageElement(messageData) {
             const deltaX = touchX - touchStartX;
             const deltaY = touchY - touchStartY;
 
+            // Clear long press timer immediately on any significant movement
+            if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+                clearTimeout(longPressTimer);
+            }
+
             if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
                 isSwiping = true;
 
@@ -3227,18 +3232,27 @@ if (messageInput) {
     });
 }
 
-// Listen for window resize (keyboard show/hide on mobile)
-let lastWindowHeight = window.innerHeight;
-window.addEventListener('resize', () => {
-    const currentHeight = window.innerHeight;
-    // If height decreased, keyboard is showing
-    if (currentHeight < lastWindowHeight) {
-        setTimeout(() => {
-            scrollToBottom(false);
-        }, 100);
-    }
-    lastWindowHeight = currentHeight;
-});
+// Listen for visual viewport resize (keyboard show/hide on mobile)
+// This is much smoother than window.resize
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+        // Immediately adjust scroll position when viewport changes
+        // This keeps the input and messages pinned correctly during the animation
+        scrollToBottom(false);
+    });
+} else {
+    // Fallback for older browsers
+    let lastWindowHeight = window.innerHeight;
+    window.addEventListener('resize', () => {
+        const currentHeight = window.innerHeight;
+        if (currentHeight < lastWindowHeight) {
+            setTimeout(() => {
+                scrollToBottom(false);
+            }, 100);
+        }
+        lastWindowHeight = currentHeight;
+    });
+}
 
 // ===========================
 // Mobile Keyboard Persistence

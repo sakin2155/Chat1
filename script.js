@@ -29,6 +29,7 @@ import {
     arrayUnion,
     arrayRemove
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
 
 // ===========================
 // Firebase Configuration
@@ -47,6 +48,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
+
+// Expose Firebase instances to window for other pages (like gallery.html)
+window.auth = auth;
+window.db = db;
+window.storage = storage;
 
 // ===========================
 // Cloudinary Configuration
@@ -688,6 +695,11 @@ document.getElementById('create-account-btn').addEventListener('click', async ()
     } finally {
         hideLoading();
     }
+});
+
+// Gallery Navigation
+document.getElementById('gallery-btn').addEventListener('click', () => {
+    window.location.href = 'gallery.html';
 });
 
 document.getElementById('logout-btn').addEventListener('click', async () => {

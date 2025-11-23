@@ -1072,6 +1072,36 @@ body {
     font-weight: 700;
 }
 
+.header-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.header-icon {
+    background: none;
+    border: none;
+    color: var(--btn-function);
+    cursor: pointer;
+    padding: 5px 10px;
+    transition: opacity 0.2s, transform 0.2s;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-icon svg {
+    stroke: currentColor;
+    width: 24px;
+    height: 24px;
+}
+
+.header-icon:hover {
+    opacity: 0.7;
+    transform: scale(1.1);
+}
+
 .logout-icon {
     background: none;
     border: none;

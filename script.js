@@ -1358,16 +1358,11 @@ function createMessageElement(messageData) {
             } else {
                 // Show options menu for own messages (both text and media)
                 targetElement.addEventListener('touchstart', (e) => {
+                    // Prevent blur event immediately to keep keyboard open
+                    e.preventDefault();
+                    
                     longPressTimer = setTimeout(() => {
-                        // Prevent default to avoid keyboard closure
-                        e.preventDefault();
                         showMessageOptions(e.touches[0], messageData.id);
-                        // Keep keyboard open on mobile
-                        if (isMobileDevice()) {
-                            setTimeout(() => {
-                                messageInput.focus();
-                            }, 100);
-                        }
                     }, 400);
                 });
 
@@ -4284,8 +4279,23 @@ document.addEventListener('click', (e) => {
     if (!messageOptions.contains(e.target) && !e.target.closest('.message-options-trigger')) {
         messageOptions.classList.add('hidden');
         isContextMenuOpen = false;
+        // Remove blur listener when menu closes
+        if (isMobileDevice()) {
+            messageInput.removeEventListener('blur', preventBlurWhileMenuOpen);
+        }
     }
 });
+
+// ===========================
+// Keyboard Management for Context Menu
+// ===========================
+function preventBlurWhileMenuOpen(e) {
+    // Prevent blur event while context menu is open
+    if (isContextMenuOpen) {
+        e.preventDefault();
+        messageInput.focus();
+    }
+}
 
 // ===========================
 // Message Options (Edit/Delete/Reply)
@@ -4335,8 +4345,11 @@ async function showMessageOptions(event, messageId) {
     isContextMenuOpen = true;
     
     // Keep keyboard open on mobile when menu appears
+    // Focus immediately and prevent any blur events
     if (isMobileDevice()) {
         messageInput.focus();
+        // Ensure focus is locked while menu is open
+        messageInput.addEventListener('blur', preventBlurWhileMenuOpen);
     }
 
     const x = event.clientX || event.pageX || 0;
@@ -4474,6 +4487,10 @@ document.querySelectorAll('.option-btn').forEach(btn => {
 
             messageOptions.classList.add('hidden');
             isContextMenuOpen = false;
+            // Remove blur listener when menu closes
+            if (isMobileDevice()) {
+                messageInput.removeEventListener('blur', preventBlurWhileMenuOpen);
+            }
         } catch (error) {
             console.error('Error performing message action:', error);
         }

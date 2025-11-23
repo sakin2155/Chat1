@@ -4217,10 +4217,31 @@ function listenForTyping() {
 
     const typingRef = doc(db, 'chats', currentChatId, 'typing', currentChatUser.uid);
     unsubscribeTyping = onSnapshot(typingRef, (docSnap) => {
-        if (docSnap.exists() && docSnap.data().typing) {
-            typingIndicator.classList.remove('hidden');
+        const isTyping = docSnap.exists() && docSnap.data().typing;
+        const existingIndicator = messagesContainer.querySelector('.message.typing-indicator-message');
+
+        if (isTyping) {
+            // Only add if it doesn't exist
+            if (!existingIndicator) {
+                const div = document.createElement('div');
+                div.className = 'message received typing-indicator-message';
+                div.innerHTML = `
+                    <div class="message-bubble typing">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                `;
+                messagesContainer.appendChild(div);
+                scrollToBottom(true);
+            }
         } else {
-            typingIndicator.classList.add('hidden');
+            // Only remove if it exists
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
         }
     });
 }
@@ -4422,17 +4443,7 @@ document.addEventListener('touchstart', (e) => {
     }
 }, true);
 
-// ===========================
-// Keyboard Management for Context Menu
-// ===========================
-function preventBlurWhileMenuOpen(e) {
-    // Prevent blur event while context menu is open
-    // Check both the flag AND that the menu is actually visible
-    if (isContextMenuOpen && !messageOptions.classList.contains('hidden')) {
-        e.preventDefault();
-        messageInput.focus();
-    }
-}
+
 
 // ===========================
 // Message Options (Edit/Delete/Reply)
@@ -4481,13 +4492,11 @@ async function showMessageOptions(event, messageId) {
     messageOptions.classList.remove('hidden');
     isContextMenuOpen = true;
 
-    // Keep keyboard open on mobile when menu appears
-    // Focus immediately and prevent any blur events
-    if (isMobileDevice()) {
-        messageInput.focus();
-        // Ensure focus is locked while menu is open
-        messageInput.addEventListener('blur', preventBlurWhileMenuOpen);
-    }
+    // Determine viewport dimensions (use visualViewport if available for keyboard awareness)
+    const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+    const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    const viewportLeft = window.visualViewport ? window.visualViewport.offsetLeft : 0;
+    const viewportTop = window.visualViewport ? window.visualViewport.offsetTop : 0;
 
     const x = event.clientX || event.pageX || 0;
     const y = event.clientY || event.pageY || 0;
@@ -4499,31 +4508,36 @@ async function showMessageOptions(event, messageId) {
     // Padding from screen edges
     const padding = 12;
 
-    // Calculate position with smart positioning
+    // Calculate position relative to the visual viewport
+    // This ensures the menu is visible even when keyboard is open
     let left = x;
     let top = y;
 
+    // Adjust for viewport offset (e.g. when zoomed or scrolled)
+    // Note: clientX/Y are relative to the visual viewport top-left in many browsers,
+    // but we need to be careful with absolute positioning.
+
     // Horizontal boundary check
-    if (left + menuWidth > window.innerWidth - padding) {
+    if (left + menuWidth > viewportLeft + viewportWidth - padding) {
         // Menu would go off right edge - position it to the left of cursor
-        left = Math.max(padding, x - menuWidth - 8);
+        left = Math.max(viewportLeft + padding, x - menuWidth - 8);
     } else {
         // Position to the right of cursor
-        left = Math.max(padding, left);
+        left = Math.max(viewportLeft + padding, left);
     }
 
     // Vertical boundary check
-    if (top + menuHeight > window.innerHeight - padding) {
-        // Menu would go off bottom edge - position it above cursor
-        top = Math.max(padding, y - menuHeight - 8);
+    if (top + menuHeight > viewportTop + viewportHeight - padding) {
+        // Menu would go off bottom edge (or behind keyboard) - position it above cursor
+        top = Math.max(viewportTop + padding, y - menuHeight - 8);
     } else {
         // Position below cursor
-        top = Math.max(padding, top);
+        top = Math.max(viewportTop + padding, top);
     }
 
-    // Final boundary enforcement
-    left = Math.max(padding, Math.min(left, window.innerWidth - menuWidth - padding));
-    top = Math.max(padding, Math.min(top, window.innerHeight - menuHeight - padding));
+    // Final boundary enforcement within visual viewport
+    left = Math.max(viewportLeft + padding, Math.min(left, viewportLeft + viewportWidth - menuWidth - padding));
+    top = Math.max(viewportTop + padding, Math.min(top, viewportTop + viewportHeight - menuHeight - padding));
 
     messageOptions.style.left = `${left}px`;
     messageOptions.style.top = `${top}px`;

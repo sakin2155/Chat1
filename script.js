@@ -1440,21 +1440,31 @@ function createMessageElement(messageData) {
                 });
             } else {
                 // Show options menu for own messages (both text and media)
+                // Show options menu for own messages (both text and media)
+                let isLongPressTriggered = false;
+
                 targetElement.addEventListener('touchstart', (e) => {
                     // Don't preventDefault here - touch-action: pan-y in CSS handles scrolling
                     // Only set up long-press timer
+                    isLongPressTriggered = false;
                     longPressTimer = setTimeout(() => {
+                        isLongPressTriggered = true;
                         showMessageOptions(e.touches[0], messageData.id);
                         // Ensure input stays focused if it was focused
                         if (document.activeElement === messageInput) {
                             // Prevent keyboard dismissal
-                            e.preventDefault();
+                            // Note: e.preventDefault() here might be too late for some browsers, 
+                            // but the key is handling touchend
                         }
                     }, 400);
                 });
 
-                targetElement.addEventListener('touchend', () => {
+                targetElement.addEventListener('touchend', (e) => {
                     clearTimeout(longPressTimer);
+                    if (isLongPressTriggered) {
+                        // Crucial: Prevent the subsequent click event which causes blur
+                        e.preventDefault();
+                    }
                 });
 
                 targetElement.addEventListener('touchmove', () => {
@@ -4370,24 +4380,51 @@ cancelReplyBtn.addEventListener('click', cancelReply);
 // ===========================
 function showReactionPopup(event, messageId) {
     selectedMessageId = messageId;
+
+    // Reparent the popup to the message element
+    const messageEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+    if (messageEl) {
+        // Reset z-index for all other messages first
+        document.querySelectorAll('.message').forEach(m => m.style.zIndex = '');
+
+        // Boost z-index of current message
+        messageEl.style.zIndex = '100';
+        messageEl.appendChild(reactionPopup);
+    }
+
     reactionPopup.classList.remove('hidden');
 
-    const x = event.clientX || event.touches[0].clientX;
-    const y = event.clientY || event.touches[0].clientY;
+    const x = event.clientX || (event.touches && event.touches[0] ? event.touches[0].clientX : 0);
+    const y = event.clientY || (event.touches && event.touches[0] ? event.touches[0].clientY : 0);
 
     // Get popup dimensions
     const popupWidth = 300; // approximate width
     const popupHeight = 60;
 
-    // Calculate position
-    let left = x - 150;
-    let top = y - 60;
+    // Calculate position relative to the MESSAGE element
+    const messageRect = messageEl.getBoundingClientRect();
 
-    // Keep within screen bounds
-    if (left < 10) left = 10;
-    if (left + popupWidth > window.innerWidth - 10) left = window.innerWidth - popupWidth - 10;
-    if (top < 10) top = 10;
-    if (top + popupHeight > window.innerHeight - 10) top = y - popupHeight - 10;
+    // Initial position: centered above the touch point, relative to message
+    let left = x - messageRect.left - (popupWidth / 2);
+    let top = y - messageRect.top - popupHeight - 10;
+
+    // Smart positioning logic relative to VIEWPORT to prevent clipping
+    // But applying it to the relative coordinates
+
+    // Horizontal boundary check (viewport)
+    if (x - (popupWidth / 2) < 10) {
+        // Too far left
+        left = 10 - messageRect.left;
+    } else if (x + (popupWidth / 2) > window.innerWidth - 10) {
+        // Too far right
+        left = (window.innerWidth - 10 - popupWidth) - messageRect.left;
+    }
+
+    // Vertical boundary check (viewport)
+    if (y - popupHeight - 10 < 10) {
+        // Too close to top, show below
+        top = y - messageRect.top + 20;
+    }
 
     reactionPopup.style.left = `${left}px`;
     reactionPopup.style.top = `${top}px`;
@@ -4409,6 +4446,10 @@ document.querySelectorAll('.reaction-btn').forEach(btn => {
             }
 
             reactionPopup.classList.add('hidden');
+
+            // Reset z-index for all messages
+            document.querySelectorAll('.message').forEach(m => m.style.zIndex = '');
+
         } catch (error) {
             console.error('Error adding reaction:', error);
         }
@@ -4416,17 +4457,26 @@ document.querySelectorAll('.reaction-btn').forEach(btn => {
 });
 
 // Hide reaction popup when clicking outside
+// Hide reaction popup when clicking outside
 document.addEventListener('click', (e) => {
+    let shouldResetZIndex = false;
+
     if (!reactionPopup.contains(e.target) && !e.target.closest('.message-bubble')) {
-        reactionPopup.classList.add('hidden');
+        if (!reactionPopup.classList.contains('hidden')) {
+            reactionPopup.classList.add('hidden');
+            shouldResetZIndex = true;
+        }
     }
     if (!messageOptions.contains(e.target) && !e.target.closest('.message-options-trigger')) {
-        messageOptions.classList.add('hidden');
-        isContextMenuOpen = false;
-        // Remove blur listener when menu closes
-        if (isMobileDevice()) {
-            messageInput.removeEventListener('blur', preventBlurWhileMenuOpen);
+        if (!messageOptions.classList.contains('hidden')) {
+            messageOptions.classList.add('hidden');
+            isContextMenuOpen = false;
+            shouldResetZIndex = true;
         }
+    }
+
+    if (shouldResetZIndex) {
+        document.querySelectorAll('.message').forEach(m => m.style.zIndex = '');
     }
 });
 
@@ -4489,6 +4539,16 @@ async function showMessageOptions(event, messageId) {
         deleteBtn.style.display = isOwnMessage ? 'block' : 'none';
     }
 
+    // Reparent the menu to the message element so it scrolls with it
+    if (messageEl) {
+        // Reset z-index for all other messages first
+        document.querySelectorAll('.message').forEach(m => m.style.zIndex = '');
+
+        // Boost z-index of current message
+        messageEl.style.zIndex = '100';
+        messageEl.appendChild(messageOptions);
+    }
+
     messageOptions.classList.remove('hidden');
     isContextMenuOpen = true;
 
@@ -4498,46 +4558,37 @@ async function showMessageOptions(event, messageId) {
     const viewportLeft = window.visualViewport ? window.visualViewport.offsetLeft : 0;
     const viewportTop = window.visualViewport ? window.visualViewport.offsetTop : 0;
 
-    const x = event.clientX || event.pageX || 0;
-    const y = event.clientY || event.pageY || 0;
-
     // Get menu dimensions
     const menuWidth = 140;
     const menuHeight = 160;
-
-    // Padding from screen edges
     const padding = 12;
 
-    // Calculate position relative to the visual viewport
-    // This ensures the menu is visible even when keyboard is open
-    let left = x;
-    let top = y;
+    // Calculate position relative to the MESSAGE element (since it's now absolute positioned inside relative parent)
+    // We need to convert the touch/click coordinates (viewport relative) to message-relative coordinates
+    const messageRect = messageEl.getBoundingClientRect();
 
-    // Adjust for viewport offset (e.g. when zoomed or scrolled)
-    // Note: clientX/Y are relative to the visual viewport top-left in many browsers,
-    // but we need to be careful with absolute positioning.
+    // Initial position: near the click/touch point, but relative to message
+    // event.clientX is viewport x, messageRect.left is viewport x of message
+    let left = (event.clientX || event.pageX || 0) - messageRect.left;
+    let top = (event.clientY || event.pageY || 0) - messageRect.top;
 
-    // Horizontal boundary check
-    if (left + menuWidth > viewportLeft + viewportWidth - padding) {
-        // Menu would go off right edge - position it to the left of cursor
-        left = Math.max(viewportLeft + padding, x - menuWidth - 8);
-    } else {
-        // Position to the right of cursor
-        left = Math.max(viewportLeft + padding, left);
+    // Smart positioning logic relative to VIEWPORT to prevent clipping
+    // But applying it to the relative coordinates
+
+    const clickX = event.clientX || event.pageX || 0;
+    const clickY = event.clientY || event.pageY || 0;
+
+    // Horizontal boundary check (viewport)
+    if (clickX + menuWidth > viewportLeft + viewportWidth - padding) {
+        // Go left
+        left -= menuWidth;
     }
 
-    // Vertical boundary check
-    if (top + menuHeight > viewportTop + viewportHeight - padding) {
-        // Menu would go off bottom edge (or behind keyboard) - position it above cursor
-        top = Math.max(viewportTop + padding, y - menuHeight - 8);
-    } else {
-        // Position below cursor
-        top = Math.max(viewportTop + padding, top);
+    // Vertical boundary check (viewport)
+    if (clickY + menuHeight > viewportTop + viewportHeight - padding) {
+        // Go up
+        top -= menuHeight;
     }
-
-    // Final boundary enforcement within visual viewport
-    left = Math.max(viewportLeft + padding, Math.min(left, viewportLeft + viewportWidth - menuWidth - padding));
-    top = Math.max(viewportTop + padding, Math.min(top, viewportTop + viewportHeight - menuHeight - padding));
 
     messageOptions.style.left = `${left}px`;
     messageOptions.style.top = `${top}px`;

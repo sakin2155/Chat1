@@ -239,6 +239,19 @@ body {
     border-radius: 8px;
 }
 
+.reaction-btn {
+    font-size: 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s;
+    padding: 5px;
+    border-radius: 50%;
+    /* Prevent selection */
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 .calc-icon:hover {
     opacity: 1;
     transform: scale(1.1);
@@ -2761,21 +2774,31 @@ body {
     display: block;
 }
 
+/* Reactions Display */
 .message-reactions {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     margin-top: 4px;
-    flex-wrap: wrap;
+    /* Prevent selection */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
-.reaction-badge {
-    background: var(--input-bg);
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    display: flex;
+.reaction-pill {
+    display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
+    background: var(--reaction-bg);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    /* Prevent selection */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .message-options-trigger {
@@ -3383,15 +3406,17 @@ body {
 
 /* Reaction Popup */
 .reaction-popup {
-    position: fixed;
-    background: var(--sidebar-bg);
-    padding: 10px;
+    position: absolute;
+    /* Changed from fixed to absolute */
+    background: var(--message-received);
     border-radius: 30px;
+    padding: 8px 16px;
     display: flex;
-    gap: 5px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    gap: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     z-index: 1000;
-    max-width: 90vw;
+    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    white-space: nowrap;
 }
 
 .reaction-btn {

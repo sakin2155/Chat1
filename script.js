@@ -4460,8 +4460,25 @@ document.querySelectorAll('.reaction-btn').forEach(btn => {
             const messageDoc = await getDoc(messageRef);
 
             if (messageDoc.exists()) {
-                const reactions = messageDoc.data().reactions || [];
-                reactions.push({ emoji, userId: currentUser.uid });
+                let reactions = messageDoc.data().reactions || [];
+
+                // Find if user already reacted
+                const existingReactionIndex = reactions.findIndex(r => r.userId === currentUser.uid);
+
+                if (existingReactionIndex !== -1) {
+                    // User already reacted
+                    if (reactions[existingReactionIndex].emoji === emoji) {
+                        // Same emoji: Remove reaction (toggle off)
+                        reactions.splice(existingReactionIndex, 1);
+                    } else {
+                        // Different emoji: Update reaction
+                        reactions[existingReactionIndex].emoji = emoji;
+                    }
+                } else {
+                    // New reaction
+                    reactions.push({ emoji, userId: currentUser.uid });
+                }
+
                 await updateDoc(messageRef, { reactions });
             }
 

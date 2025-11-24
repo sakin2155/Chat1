@@ -1417,15 +1417,26 @@ function createMessageElement(messageData) {
     let replyHtml = '';
     if (!isDeleted && messageData.replyTo && !isStickerOrGif) {
         const replyName = messageData.replyTo.senderName || 'Unknown';
-        const replyPreviewData = getMessagePreviewData(messageData.replyTo);
+        const replyText = messageData.replyTo.text || '[Message]';
+        const replyMediaUrl = messageData.replyTo.imgUrl;
+        const replyType = messageData.replyTo.type;
+
+        console.log('Rendering reply context:', {
+            replyType,
+            replyMediaUrl,
+            hasMediaUrl: !!replyMediaUrl,
+            isMediaType: replyType === 'image' || replyType === 'sticker' || replyType === 'gif'
+        });
 
         let mediaPreviewHtml = '';
-        if (replyPreviewData.mediaUrl) {
+        // Show thumbnail for images, stickers, and GIFs
+        if (replyMediaUrl && (replyType === 'image' || replyType === 'sticker' || replyType === 'gif')) {
             mediaPreviewHtml = `
                 <div class="reply-context-media-preview">
-                    <img src="${replyPreviewData.mediaUrl}" alt="${replyPreviewData.text}" class="reply-media-thumbnail">
+                    <img src="${replyMediaUrl}" alt="${replyText}" class="reply-media-thumbnail" onerror="this.style.display='none'">
                 </div>
             `;
+            console.log('Media preview HTML created for reply');
         }
 
         replyHtml = `
@@ -1433,7 +1444,7 @@ function createMessageElement(messageData) {
                 ${mediaPreviewHtml}
                 <div class="reply-context-content">
                     <div class="reply-context-name">${escapeHtml(replyName)}</div>
-                    <div class="reply-context-text">${escapeHtml(replyPreviewData.text)}</div>
+                    <div class="reply-context-text">${escapeHtml(replyText)}</div>
                 </div>
             </div>
         `;
@@ -3529,12 +3540,20 @@ async function sendMessage() {
 
 function applyReplyContext(messageData) {
     if (replyingToMessage && messageData) {
+        const previewData = getMessagePreviewData(replyingToMessage);
         messageData.replyTo = {
             messageId: replyingToMessage.id,
             senderId: replyingToMessage.senderId,
             senderName: replyingToMessage.senderName || 'Unknown',
-            text: getMessagePreviewText(replyingToMessage)
+            text: previewData.text,
+            type: replyingToMessage.type,
+            imgUrl: replyingToMessage.imgUrl || null
         };
+        console.log('Reply context applied:', {
+            type: replyingToMessage.type,
+            imgUrl: replyingToMessage.imgUrl,
+            text: previewData.text
+        });
     }
     return messageData;
 }
@@ -4544,7 +4563,8 @@ async function triggerSwipeReply(messageData) {
         senderId: messageData.senderId,
         senderName: senderName,
         text: messageData.text,
-        type: messageData.type
+        type: messageData.type,
+        imgUrl: messageData.imgUrl || null
     });
 }
 
@@ -4832,7 +4852,8 @@ document.querySelectorAll('.option-btn').forEach(btn => {
                         senderId: messageData.senderId,
                         senderName: senderName,
                         text: messageData.text,
-                        type: messageData.type
+                        type: messageData.type,
+                        imgUrl: messageData.imgUrl || null
                     });
                 }
             } else if (action === 'delete') {

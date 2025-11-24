@@ -911,6 +911,60 @@ function formatTime(timestamp) {
 }
 
 // ===========================
+// Draft Persistence
+// ===========================
+function saveDraft(chatId, text) {
+    if (!chatId) return;
+    const key = `draft:${chatId}`;
+    if (text && text.trim()) {
+        localStorage.setItem(key, text);
+    } else {
+        localStorage.removeItem(key);
+    }
+    updateDraftIndicator(chatId);
+}
+
+function loadDraft(chatId) {
+    if (!chatId) return '';
+    return localStorage.getItem(`draft:${chatId}`) || '';
+}
+
+function clearDraft(chatId) {
+    if (!chatId) return;
+    localStorage.removeItem(`draft:${chatId}`);
+    updateDraftIndicator(chatId);
+}
+
+function updateDraftIndicator(chatId) {
+    document.querySelectorAll('.user-item').forEach(item => {
+        const userId = item.dataset.userId;
+        if (!userId || !currentUser) return;
+
+        const itemChatId = getChatId(currentUser.uid, userId);
+        if (itemChatId === chatId) {
+            const previewEl = item.querySelector('.user-preview');
+            if (!previewEl) return;
+
+            const draft = loadDraft(chatId);
+            if (draft) {
+                previewEl.innerHTML = `<span style="color: #ff4b4b;">Draft: </span> ${escapeHtml(draft)}`;
+                previewEl.classList.remove('unread');
+            } else {
+                // Restore real preview
+                const realPreview = item.dataset.realPreview || 'No messages yet';
+                const isUnread = item.dataset.isUnread === 'true';
+                previewEl.textContent = realPreview;
+                if (isUnread) {
+                    previewEl.classList.add('unread');
+                } else {
+                    previewEl.classList.remove('unread');
+                }
+            }
+        }
+    });
+}
+
+// ===========================
 // User List
 // ===========================
 async function loadUsers() {
@@ -1059,8 +1113,9 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
         if (!previewEl) return;
 
         if (snapshot.empty) {
-            previewEl.textContent = 'No messages yet';
-            previewEl.classList.remove('unread');
+            // No messages
+            userItemEl.dataset.realPreview = 'No messages yet';
+            userItemEl.dataset.isUnread = 'false';
         } else {
             const latestMessage = snapshot.docs[0].data();
             const previewText = getMessagePreviewText(latestMessage);
@@ -1068,15 +1123,20 @@ function loadLatestMessagePreview(otherUserId, userItemEl) {
             // Add "You: " prefix if current user sent the message
             const isCurrentUserSender = latestMessage.senderId === currentUser.uid;
             const displayText = isCurrentUserSender ? `You: ${previewText}` : previewText;
-            previewEl.textContent = displayText;
+
+            userItemEl.dataset.realPreview = displayText;
 
             // Add unread indicator if message is not seen and not from current user
             if (!latestMessage.seen && latestMessage.senderId !== currentUser.uid) {
-                previewEl.classList.add('unread');
+                userItemEl.dataset.isUnread = 'true';
             } else {
-                previewEl.classList.remove('unread');
+                userItemEl.dataset.isUnread = 'false';
             }
         }
+
+        // Update UI (checking for draft)
+        const currentChatId = getChatId(currentUser.uid, otherUserId);
+        updateDraftIndicator(currentChatId);
     });
 
     // Store unsubscribe function for cleanup if needed
@@ -1151,6 +1211,15 @@ async function openChat(userData) {
 
     // Load messages
     loadMessages();
+
+    // Load draft
+    const draft = loadDraft(currentChatId);
+    if (messageInput) {
+        messageInput.value = draft;
+        // Trigger resize
+        messageInput.style.height = 'auto';
+        messageInput.style.height = (messageInput.scrollHeight) + 'px';
+    }
 
     // Listen for typing indicator
     listenForTyping();
@@ -1241,12 +1310,13 @@ function createMessageElement(messageData) {
     const isGameInvite = messageData.type === 'game_invite';
     const isVoiceMessage = !isDeleted && messageData.type === 'voice';
     const isStickerOrGif = !isDeleted && (messageData.type === 'sticker' || messageData.type === 'gif');
+    const isImageMessage = !isDeleted && messageData.type === 'image' && !messageData.text;
 
     // Check for single emoji
     const isSingleEmoji = !isDeleted && !isSystemMessage && !isGameInvite && !isVoiceMessage && !isStickerOrGif && messageData.text && isSingleEmojiString(messageData.text);
 
     const div = document.createElement('div');
-    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}${isSingleEmoji ? ' supersized-emoji' : ''}`;
+    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isImageMessage ? ' image-only' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}${isSingleEmoji ? ' supersized-emoji' : ''}`;
     div.dataset.messageId = messageData.id;
     div.dataset.messageType = messageData.type || 'text';
     // Store timestamp in milliseconds for proper sorting
@@ -1326,7 +1396,20 @@ function createMessageElement(messageData) {
     } else if (isMediaMessage(messageData)) {
         const mediaClass = messageData.type === 'sticker' ? 'message-sticker' : 'message-image';
         const altLabel = getMediaAltText(messageData.type);
-        content = `<img src="${messageData.imgUrl}" class="${mediaClass}" alt="${altLabel}">`;
+        
+        // For image messages on receiver side, add loading spinner
+        if (messageData.type === 'image' && !isOwnMessage) {
+            content = `
+                <div class="image-loading-container" style="position: relative; display: inline-block;">
+                    <img src="${messageData.imgUrl}" class="${mediaClass} loading" alt="${altLabel}" data-image-id="${messageData.id}">
+                    <div class="image-loading-overlay" style="display: none;">
+                        <div class="image-loading-spinner"></div>
+                    </div>
+                </div>
+            `;
+        } else {
+            content = `<img src="${messageData.imgUrl}" class="${mediaClass}" alt="${altLabel}">`;
+        }
     } else {
         content = `<span class="message-text">${formatMessageText(messageData.text || '')}</span>`;
     }
@@ -1600,6 +1683,35 @@ function createMessageElement(messageData) {
                         showMessageOptions(e, messageData.id);
                     }
                 });
+
+                // Handle receiver-side image loading spinner
+                if (messageData.type === 'image' && !isOwnMessage) {
+                    const loadingOverlay = div.querySelector('.image-loading-overlay');
+                    if (loadingOverlay && mediaEl) {
+                        // Show spinner initially
+                        loadingOverlay.style.display = 'flex';
+
+                        // Hide spinner when image loads
+                        mediaEl.addEventListener('load', () => {
+                            loadingOverlay.style.display = 'none';
+                            mediaEl.classList.remove('loading');
+                            mediaEl.classList.add('loaded');
+                        });
+
+                        // Hide spinner on error too
+                        mediaEl.addEventListener('error', () => {
+                            loadingOverlay.style.display = 'none';
+                            mediaEl.classList.remove('loading');
+                        });
+
+                        // If image is already cached/loaded, hide spinner
+                        if (mediaEl.complete) {
+                            loadingOverlay.style.display = 'none';
+                            mediaEl.classList.remove('loading');
+                            mediaEl.classList.add('loaded');
+                        }
+                    }
+                }
             }
         }
 
@@ -3239,6 +3351,17 @@ if (messageInput) {
         if (!editingMessageId) {
             scrollToBottom(false);
         }
+
+        // Save draft
+        if (currentChatId) {
+            saveDraft(currentChatId, this.value);
+        }
+    });
+
+    messageInput.addEventListener('blur', function () {
+        if (currentChatId) {
+            saveDraft(currentChatId, this.value);
+        }
     });
 }
 
@@ -3382,6 +3505,7 @@ async function sendMessage() {
 
         await addDoc(messagesRef, applyReplyContext(messageData));
 
+        clearDraft(currentChatId); // Clear draft after sending
         cancelReply();
         updateTypingStatus(false);
 
@@ -3804,16 +3928,36 @@ imageInput.addEventListener('change', async (e) => {
     if (!file || !currentChatId) return;
 
     try {
-        // Create temporary message with progress bar
+        // Create thumbnail from file
+        const thumbnailUrl = URL.createObjectURL(file);
+        
+        // Create temporary message with circular progress indicator
         const tempMessageId = `temp-${Date.now()}`;
         const tempMessageDiv = document.createElement('div');
-        tempMessageDiv.className = 'message sent uploading';
+        tempMessageDiv.className = 'message sent image-only uploading';
         tempMessageDiv.dataset.messageId = tempMessageId;
+        
+        // Create SVG circle for determinate progress
+        const radius = 26;
+        const circumference = 2 * Math.PI * radius;
+        
         tempMessageDiv.innerHTML = `
-            <div class="message-bubble uploading">
-                <img src="${URL.createObjectURL(file)}" class="message-image" alt="Uploading..." style="opacity: 0.5;">
-                <div class="message-upload-progress">
-                    <div class="message-upload-progress-fill"></div>
+            <div class="message-bubble">
+                <div class="image-upload-container">
+                    <div class="image-upload-wrapper">
+                        <img src="${thumbnailUrl}" class="image-upload-thumbnail" alt="Uploading...">
+                        <div class="image-progress-overlay">
+                            <div class="circular-progress">
+                                <div class="circular-progress-bg"></div>
+                                <svg class="circular-progress-svg" viewBox="0 0 60 60">
+                                    <circle class="circular-progress-circle" cx="30" cy="30" r="${radius}"
+                                        style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${circumference};">
+                                    </circle>
+                                </svg>
+                                <div class="circular-progress-text">0%</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -3822,9 +3966,14 @@ imageInput.addEventListener('change', async (e) => {
 
         // Upload with progress tracking
         const secureUrl = await uploadImageToCloudinary(file, (progress) => {
-            const progressFill = tempMessageDiv.querySelector('.message-upload-progress-fill');
-            if (progressFill) {
-                progressFill.style.width = `${progress}%`;
+            const progressCircle = tempMessageDiv.querySelector('.circular-progress-circle');
+            const progressText = tempMessageDiv.querySelector('.circular-progress-text');
+            
+            if (progressCircle && progressText) {
+                // Calculate stroke-dashoffset for determinate progress
+                const offset = circumference - (progress / 100) * circumference;
+                progressCircle.style.strokeDashoffset = offset;
+                progressText.textContent = `${Math.round(progress)}%`;
             }
         });
 

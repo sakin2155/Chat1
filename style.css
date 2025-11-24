@@ -5238,3 +5238,243 @@ video.story-viewer-media {
 .message.received.supersized-emoji {
     justify-content: flex-start;
 }
+
+/* ===========================
+   IMAGE PROGRESS INDICATORS
+   =========================== */
+
+/* Transparent bubble for image-only messages */
+.message.image-only .message-bubble {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
+.message.image-only .message-image {
+    max-width: 280px;
+    border-radius: 12px;
+    display: block;
+}
+
+/* Sender-side: Determinate Circular Progress Indicator */
+.image-upload-container {
+    position: relative;
+    display: inline-block;
+    max-width: 280px;
+}
+
+.image-upload-wrapper {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.image-upload-thumbnail {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    opacity: 0.7;
+}
+
+/* Circular progress overlay container */
+.image-progress-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    z-index: 10;
+}
+
+/* Determinate circular progress indicator */
+.circular-progress {
+    position: relative;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.circular-progress-bg {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1) inset;
+}
+
+.circular-progress-svg {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.circular-progress-circle {
+    fill: none;
+    stroke: white;
+    stroke-width: 3;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.3));
+    transition: stroke-dashoffset 0.3s ease-out;
+}
+
+.circular-progress-text {
+    position: relative;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    z-index: 1;
+    min-width: 24px;
+    text-align: center;
+}
+
+/* Receiver-side: Indeterminate Spinner */
+.image-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    z-index: 10;
+    backdrop-filter: blur(2px);
+}
+
+.image-loading-spinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.25);
+    border-top-color: white;
+    border-right-color: rgba(255, 255, 255, 0.5);
+    animation: imageSpinnerRotate 0.8s linear infinite;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+@keyframes imageSpinnerRotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Image loading state */
+.message-image.loading {
+    opacity: 0.5;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* Image loaded state - smooth fade in */
+.message-image.loaded {
+    animation: imageLoadFadeIn 0.3s ease-out;
+    opacity: 1;
+}
+
+@keyframes imageLoadFadeIn {
+    from {
+        opacity: 0.5;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Placeholder blur effect for low-quality thumbnails */
+.image-placeholder {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(8px);
+    border-radius: 12px;
+    z-index: 1;
+}
+
+.image-placeholder-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    z-index: 2;
+}
+
+/* Message status indicator positioning for image messages */
+.message.image-only .message-status {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 4px 8px;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.9);
+    z-index: 5;
+}
+
+/* Reactions positioning for image messages */
+.message.image-only .message-reactions {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .message.image-only .message-image {
+        max-width: 240px;
+    }
+
+    .circular-progress {
+        width: 50px;
+        height: 50px;
+    }
+
+    .circular-progress-circle {
+        stroke-width: 2.5;
+    }
+
+    .circular-progress-text {
+        font-size: 11px;
+    }
+
+    .image-loading-spinner {
+        width: 36px;
+        height: 36px;
+        border-width: 2.5px;
+    }
+}
+
+@media (max-width: 480px) {
+    .message.image-only .message-image {
+        max-width: 200px;
+    }
+
+    .circular-progress {
+        width: 44px;
+        height: 44px;
+    }
+
+    .circular-progress-circle {
+        stroke-width: 2;
+    }
+
+    .circular-progress-text {
+        font-size: 10px;
+    }
+
+    .image-loading-spinner {
+        width: 32px;
+        height: 32px;
+        border-width: 2px;
+    }
+}

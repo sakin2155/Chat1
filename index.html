@@ -469,47 +469,118 @@
                 <!-- Theme Customization Section -->
                 <hr class="settings-divider">
                 <div class="theme-section">
-                    <h3>Chat Theme</h3>
+                    <h3>💬 Chat Theme</h3>
+                    <p class="theme-description">Choose a preset or customize your message bubbles</p>
 
-                    <!-- Message Bubble Colors -->
-                    <div class="theme-subsection">
-                        <label>Message Bubbles</label>
+                    <!-- Theme Presets -->
+                    <div class="theme-presets-section">
+                        <label>Quick Presets</label>
+                        <div class="theme-presets-grid">
+                            <button class="theme-preset-btn" data-preset="default" title="Default theme">
+                                <div class="preset-preview">
+                                    <div class="preset-bubble sent"></div>
+                                    <div class="preset-bubble received"></div>
+                                </div>
+                                <span>Default</span>
+                            </button>
+                            <button class="theme-preset-btn" data-preset="ocean" title="Ocean theme">
+                                <div class="preset-preview">
+                                    <div class="preset-bubble sent"></div>
+                                    <div class="preset-bubble received"></div>
+                                </div>
+                                <span>Ocean</span>
+                            </button>
+                            <button class="theme-preset-btn" data-preset="sunset" title="Sunset theme">
+                                <div class="preset-preview">
+                                    <div class="preset-bubble sent"></div>
+                                    <div class="preset-bubble received"></div>
+                                </div>
+                                <span>Sunset</span>
+                            </button>
+                            <button class="theme-preset-btn" data-preset="forest" title="Forest theme">
+                                <div class="preset-preview">
+                                    <div class="preset-bubble sent"></div>
+                                    <div class="preset-bubble received"></div>
+                                </div>
+                                <span>Forest</span>
+                            </button>
+                            <button class="theme-preset-btn" data-preset="purple" title="Purple theme">
+                                <div class="preset-preview">
+                                    <div class="preset-bubble sent"></div>
+                                    <div class="preset-bubble received"></div>
+                                </div>
+                                <span>Purple</span>
+                            </button>
+                            <button class="theme-preset-btn" data-preset="dark" title="Dark theme">
+                                <div class="preset-preview">
+                                    <div class="preset-bubble sent"></div>
+                                    <div class="preset-bubble received"></div>
+                                </div>
+                                <span>Dark</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Preview -->
+                    <div class="theme-preview-section">
+                        <label>Preview</label>
+                        <div class="message-preview-container">
+                            <div class="preview-message sent">
+                                <div class="preview-bubble">You: Hello! 👋</div>
+                            </div>
+                            <div class="preview-message received">
+                                <div class="preview-bubble">Friend: Hey there! 😊</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Custom Colors -->
+                    <div class="theme-custom-section">
+                        <label>Custom Colors</label>
                         <div class="color-picker-group">
                             <div class="color-picker-item">
                                 <label for="sent-bubble-color">Your Messages</label>
-                                <input type="color" id="sent-bubble-color" class="color-picker"
-                                    title="Sent message color">
+                                <div class="color-input-wrapper">
+                                    <input type="color" id="sent-bubble-color" class="color-picker"
+                                        title="Sent message color">
+                                    <span class="color-value" id="sent-color-value">#0084ff</span>
+                                </div>
                             </div>
                             <div class="color-picker-item">
                                 <label for="received-bubble-color">Their Messages</label>
-                                <input type="color" id="received-bubble-color" class="color-picker"
-                                    title="Received message color">
+                                <div class="color-input-wrapper">
+                                    <input type="color" id="received-bubble-color" class="color-picker"
+                                        title="Received message color">
+                                    <span class="color-value" id="received-color-value">#2a2a2a</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Chat Background -->
-                    <div class="theme-subsection">
+                    <div class="theme-bg-section">
                         <label>Chat Background</label>
                         <div class="background-options">
                             <div class="bg-option">
                                 <label for="bg-color">Background Color</label>
-                                <input type="color" id="bg-color" class="color-picker" title="Background color">
+                                <div class="color-input-wrapper">
+                                    <input type="color" id="bg-color" class="color-picker" title="Background color">
+                                    <span class="color-value" id="bg-color-value">#050505</span>
+                                </div>
                             </div>
                             <div class="bg-option">
-                                <label for="bg-image">Upload Background Image</label>
+                                <label for="bg-image">Background Image</label>
                                 <input type="file" id="bg-image" accept="image/*" class="hidden">
-                                <button id="bg-image-btn" class="secondary small">Choose Image</button>
-                                <button id="remove-bg-image-btn" class="secondary small danger-text">Remove
-                                    Image</button>
+                                <button id="bg-image-btn" class="secondary small">📸 Choose Image</button>
+                                <button id="remove-bg-image-btn" class="secondary small danger-text hidden">Remove Image</button>
                             </div>
                         </div>
                     </div>
 
                     <!-- Theme Actions -->
                     <div class="theme-actions">
-                        <button id="reset-theme-btn" class="secondary">Reset to Default</button>
-                        <button id="apply-theme-btn">Apply Theme</button>
+                        <button id="reset-theme-btn" class="secondary">↺ Reset to Default</button>
+                        <button id="apply-theme-btn">✓ Apply Theme</button>
                     </div>
                 </div>
 

@@ -387,9 +387,53 @@ if (bgImageInput) {
 if (removeBgImageBtn) {
     removeBgImageBtn.addEventListener('click', removeBgImage);
 }
+
+// Theme Preset Buttons
+document.querySelectorAll('.theme-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const presetName = btn.dataset.preset;
+        applyThemePreset(presetName);
+    });
+});
+
+// Theme Color Inputs - Live Preview
+if (sentBubbleColorInput) {
+    sentBubbleColorInput.addEventListener('change', () => {
+        updateColorValueDisplays();
+        updateThemePreview();
+    });
+    sentBubbleColorInput.addEventListener('input', () => {
+        updateColorValueDisplays();
+        updateThemePreview();
+    });
+}
+
+if (receivedBubbleColorInput) {
+    receivedBubbleColorInput.addEventListener('change', () => {
+        updateColorValueDisplays();
+        updateThemePreview();
+    });
+    receivedBubbleColorInput.addEventListener('input', () => {
+        updateColorValueDisplays();
+        updateThemePreview();
+    });
+}
+
+if (bgColorInput) {
+    bgColorInput.addEventListener('change', () => {
+        updateColorValueDisplays();
+        updateThemePreview();
+    });
+    bgColorInput.addEventListener('input', () => {
+        updateColorValueDisplays();
+        updateThemePreview();
+    });
+}
+
 if (applyThemeBtn) {
     applyThemeBtn.addEventListener('click', applyTheme);
 }
+
 if (resetThemeBtn) {
     resetThemeBtn.addEventListener('click', resetTheme);
 }
@@ -418,6 +462,22 @@ if (storyNextBtn) {
 if (storyLikeBtn) {
     storyLikeBtn.addEventListener('click', toggleStoryLike);
 }
+
+// Image Viewer Download Functionality
+if (imageViewerClose) {
+    imageViewerClose.addEventListener('click', closeImageViewer);
+}
+if (imageViewer) {
+    imageViewer.addEventListener('click', (e) => {
+        if (e.target === imageViewer || e.target.classList.contains('image-viewer-backdrop')) {
+            closeImageViewer();
+        }
+    });
+}
+if (imageViewerDownload) {
+    imageViewerDownload.addEventListener('click', handleImageDownload);
+}
+
 // Media menu will be handled separately
 if (closeGifModalBtn) {
     closeGifModalBtn.addEventListener('click', closeGifModal);
@@ -1265,7 +1325,7 @@ function loadMessages() {
         snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
                 const messageData = { id: change.doc.id, ...change.doc.data() };
-                
+
                 // CRITICAL: Immediately hide typing indicator for this sender
                 // This ensures the indicator disappears instantly when the message arrives
                 if (messageData.senderId === currentChatUser?.uid) {
@@ -1275,7 +1335,7 @@ function loadMessages() {
                         typingIndicatorEl.remove();
                     }
                 }
-                
+
                 appendMessage(messageData);
                 hasNewMessages = true;
                 messageCount++;
@@ -2600,9 +2660,17 @@ function formatStoryTime(date) {
 function openImageViewer(url) {
     if (!imageViewer || !imageViewerImg || !imageViewerDownload) return;
     imageViewerImg.src = url;
-    imageViewerDownload.href = url;
+
+    // For Cloudinary URLs, add download parameter to force download
+    let downloadUrl = url;
+    if (url.includes('cloudinary')) {
+        downloadUrl = url.replace('/upload/', '/upload/fl_attachment/');
+    }
+
+    imageViewerDownload.href = downloadUrl;
     const fileName = url.split('/').pop().split('?')[0];
     imageViewerDownload.setAttribute('download', fileName || 'image');
+    imageViewerDownload.target = '_blank';
     imageViewer.classList.remove('hidden');
 }
 
@@ -2612,21 +2680,35 @@ function closeImageViewer() {
     if (imageViewerImg) {
         imageViewerImg.src = '';
     }
-    if (imageViewerDownload) {
-        imageViewerDownload.removeAttribute('href');
-    }
 }
 
 async function handleImageDownload(e) {
     e.preventDefault();
     if (!imageViewerImg || !imageViewerImg.src) return;
+
     const url = imageViewerImg.src;
+    const downloadBtn = e.target;
+
     try {
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = 'Downloading...';
+
         const response = await fetch(url, { mode: 'cors' });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const blob = await response.blob();
-        triggerFileDownload(blob, getFileNameFromUrl(url));
+        const fileName = getFileNameFromUrl(url);
+        triggerFileDownload(blob, fileName);
+
+        // Reset button
+        downloadBtn.textContent = 'Download';
+        downloadBtn.disabled = false;
     } catch (error) {
         console.error('Error downloading image:', error);
+        downloadBtn.textContent = 'Download';
+        downloadBtn.disabled = false;
         alert('Unable to download image right now. Please try again.');
     }
 }
@@ -2855,6 +2937,22 @@ function openChatSettingsModal() {
     sentBubbleColorInput.value = theme.sentBubbleColor;
     receivedBubbleColorInput.value = theme.receivedBubbleColor;
     bgColorInput.value = theme.bgColor;
+    
+    // Update color value displays
+    updateColorValueDisplays();
+    
+    // Update theme preview
+    updateThemePreview();
+    
+    // Update preset button states
+    updatePresetButtonStates('default');
+    
+    // Show/hide remove bg image button
+    if (theme.bgImage) {
+        removeBgImageBtn.classList.remove('hidden');
+    } else {
+        removeBgImageBtn.classList.add('hidden');
+    }
 
     chatSettingsModal.classList.remove('hidden');
 }
@@ -2977,6 +3075,47 @@ async function addSystemMessage(text) {
 // ===========================
 // Chat Theme System
 // ===========================
+
+// Theme Presets
+const THEME_PRESETS = {
+    default: {
+        name: 'Default',
+        sentBubbleColor: '#0084ff',
+        receivedBubbleColor: '#2a2a2a',
+        bgColor: '#050505'
+    },
+    ocean: {
+        name: 'Ocean',
+        sentBubbleColor: '#00a8e8',
+        receivedBubbleColor: '#003d5c',
+        bgColor: '#0a1929'
+    },
+    sunset: {
+        name: 'Sunset',
+        sentBubbleColor: '#ff6b35',
+        receivedBubbleColor: '#f7931e',
+        bgColor: '#1a0f0a'
+    },
+    forest: {
+        name: 'Forest',
+        sentBubbleColor: '#2d6a4f',
+        receivedBubbleColor: '#1b4332',
+        bgColor: '#0b2e1a'
+    },
+    purple: {
+        name: 'Purple',
+        sentBubbleColor: '#9d4edd',
+        receivedBubbleColor: '#5a189a',
+        bgColor: '#1a0f2e'
+    },
+    dark: {
+        name: 'Dark',
+        sentBubbleColor: '#1a1a1a',
+        receivedBubbleColor: '#0d0d0d',
+        bgColor: '#000000'
+    }
+};
+
 function getDefaultTheme() {
     return {
         sentBubbleColor: '#0084ff',      // Blue - white text
@@ -2985,6 +3124,57 @@ function getDefaultTheme() {
         bgImage: null,
         bgImageOverlay: true
     };
+}
+
+function applyThemePreset(presetName) {
+    if (!THEME_PRESETS[presetName]) return;
+    
+    const preset = THEME_PRESETS[presetName];
+    sentBubbleColorInput.value = preset.sentBubbleColor;
+    receivedBubbleColorInput.value = preset.receivedBubbleColor;
+    bgColorInput.value = preset.bgColor;
+    
+    // Update color value displays
+    updateColorValueDisplays();
+    
+    // Update live preview
+    updateThemePreview();
+    
+    // Update preset button active state
+    updatePresetButtonStates(presetName);
+}
+
+function updateColorValueDisplays() {
+    document.getElementById('sent-color-value').textContent = sentBubbleColorInput.value.toUpperCase();
+    document.getElementById('received-color-value').textContent = receivedBubbleColorInput.value.toUpperCase();
+    document.getElementById('bg-color-value').textContent = bgColorInput.value.toUpperCase();
+}
+
+function updateThemePreview() {
+    const sentColor = sentBubbleColorInput.value;
+    const receivedColor = receivedBubbleColorInput.value;
+    const bgColor = bgColorInput.value;
+    
+    // Update preview bubbles
+    const previewContainer = document.querySelector('.message-preview-container');
+    if (previewContainer) {
+        const sentBubble = previewContainer.querySelector('.preview-message.sent .preview-bubble');
+        const receivedBubble = previewContainer.querySelector('.preview-message.received .preview-bubble');
+        
+        if (sentBubble) sentBubble.style.backgroundColor = sentColor;
+        if (receivedBubble) receivedBubble.style.backgroundColor = receivedColor;
+        
+        previewContainer.style.backgroundColor = bgColor;
+    }
+}
+
+function updatePresetButtonStates(activePreset) {
+    document.querySelectorAll('.theme-preset-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.preset === activePreset) {
+            btn.classList.add('active');
+        }
+    });
 }
 
 function handleBgImageChange(event) {
@@ -2999,6 +3189,9 @@ function handleBgImageChange(event) {
             const theme = chatThemes.get(currentChatId) || getDefaultTheme();
             theme.bgImage = imageData;
             chatThemes.set(currentChatId, theme);
+            
+            // Show remove button
+            removeBgImageBtn.classList.remove('hidden');
         }
     };
     reader.readAsDataURL(file);
@@ -3009,6 +3202,7 @@ function removeBgImage() {
     theme.bgImage = null;
     chatThemes.set(currentChatId, theme);
     bgImageInput.value = '';
+    removeBgImageBtn.classList.add('hidden');
 }
 
 async function applyTheme() {
@@ -4963,15 +5157,41 @@ function listenForNotifications() {
         unsubscribeNotifications = onSnapshot(q, (snapshot) => {
             userNotifications = [];
             notificationsUnreadCount = 0;
+            const now = new Date();
+            const NOTIFICATION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
             snapshot.forEach((doc) => {
                 const notification = {
                     id: doc.id,
                     ...doc.data()
                 };
-                userNotifications.push(notification);
-                if (!notification.read) {
-                    notificationsUnreadCount++;
+
+                // Check if notification has expired
+                let notificationTime;
+                if (notification.timestamp?.toDate) {
+                    notificationTime = notification.timestamp.toDate();
+                } else if (notification.timestamp instanceof Date) {
+                    notificationTime = notification.timestamp;
+                } else if (typeof notification.timestamp === 'number') {
+                    notificationTime = new Date(notification.timestamp);
+                } else {
+                    notificationTime = new Date();
+                }
+
+                const timeDifference = now - notificationTime;
+
+                // If notification is older than 24 hours, delete it
+                if (timeDifference > NOTIFICATION_EXPIRY_MS) {
+                    console.log('Deleting expired notification:', notification.id);
+                    deleteDoc(doc.ref).catch(error => {
+                        console.error('Error deleting expired notification:', error);
+                    });
+                } else {
+                    // Only add non-expired notifications
+                    userNotifications.push(notification);
+                    if (!notification.read) {
+                        notificationsUnreadCount++;
+                    }
                 }
             });
 

@@ -1696,12 +1696,16 @@ function createMessageElement(messageData) {
                             loadingOverlay.style.display = 'none';
                             mediaEl.classList.remove('loading');
                             mediaEl.classList.add('loaded');
+                            // Scroll to bottom after image loads to show complete message
+                            scrollToBottom(false);
                         });
 
                         // Hide spinner on error too
                         mediaEl.addEventListener('error', () => {
                             loadingOverlay.style.display = 'none';
                             mediaEl.classList.remove('loading');
+                            // Scroll to bottom even on error
+                            scrollToBottom(false);
                         });
 
                         // If image is already cached/loaded, hide spinner
@@ -1709,6 +1713,8 @@ function createMessageElement(messageData) {
                             loadingOverlay.style.display = 'none';
                             mediaEl.classList.remove('loading');
                             mediaEl.classList.add('loaded');
+                            // Scroll to bottom for cached images
+                            scrollToBottom(false);
                         }
                     }
                 }

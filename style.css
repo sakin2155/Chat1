@@ -2370,6 +2370,8 @@ body {
     -webkit-user-select: none;
     /* Scroll anchoring prevents jumps when content changes above */
     overflow-anchor: auto;
+    /* Smooth transitions for layout changes when typing indicator appears/disappears */
+    transition: scroll-behavior 0.3s ease-out, height 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes fadeIn {
@@ -2395,6 +2397,8 @@ body {
     margin-bottom: 8px;
     animation: slideIn 0.3s ease-out;
     position: relative;
+    /* Smooth height transitions for typing indicator removal */
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out, margin 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     touch-action: pan-y;
 }
 
@@ -2825,6 +2829,29 @@ body {
 /* Typing Indicator */
 .typing-indicator {
     padding: 10px 20px;
+    animation: slideUpTyping 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: flex;
+    align-items: center;
+    /* Smooth fade-out when indicator is removed */
+    transition: opacity 0.2s ease-out, margin 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.typing-indicator.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease-out, margin 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUpTyping {
+    from {
+        opacity: 0;
+        transform: translateY(15px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .typing-dots {
@@ -2838,6 +2865,8 @@ body {
     cursor: default;
     user-select: none;
     -webkit-user-select: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    animation: typingBounce 0.6s ease-in-out infinite;
 }
 
 .typing-dots span {
@@ -2868,6 +2897,18 @@ body {
     50% {
         opacity: 1;
         transform: translateY(-3px);
+    }
+}
+
+@keyframes typingBounce {
+
+    0%,
+    100% {
+        transform: translateY(0) scale(1);
+    }
+
+    50% {
+        transform: translateY(-2px) scale(1.02);
     }
 }
 
@@ -2908,6 +2949,19 @@ body {
     .messages-container {
         /* Add padding to prevent messages from being hidden under input */
         padding-bottom: 20px;
+    }
+
+    /* Hide message options trigger on mobile */
+    .message-options-trigger {
+        display: none !important;
+    }
+
+    .message:hover .message-options-trigger {
+        display: none !important;
+    }
+
+    .message.sent .media-message-wrapper:hover .message-options-trigger {
+        display: none !important;
     }
 }
 
@@ -5383,6 +5437,7 @@ video.story-viewer-media {
     from {
         opacity: 0.5;
     }
+
     to {
         opacity: 1;
     }

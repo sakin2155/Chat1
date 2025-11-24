@@ -1265,6 +1265,17 @@ function loadMessages() {
         snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
                 const messageData = { id: change.doc.id, ...change.doc.data() };
+                
+                // CRITICAL: Immediately hide typing indicator for this sender
+                // This ensures the indicator disappears instantly when the message arrives
+                if (messageData.senderId === currentChatUser?.uid) {
+                    const typingIndicatorEl = messagesContainer.querySelector('.message.typing-indicator-message');
+                    if (typingIndicatorEl) {
+                        // Remove immediately without animation delay
+                        typingIndicatorEl.remove();
+                    }
+                }
+                
                 appendMessage(messageData);
                 hasNewMessages = true;
                 messageCount++;
@@ -1396,7 +1407,7 @@ function createMessageElement(messageData) {
     } else if (isMediaMessage(messageData)) {
         const mediaClass = messageData.type === 'sticker' ? 'message-sticker' : 'message-image';
         const altLabel = getMediaAltText(messageData.type);
-        
+
         // For image messages on receiver side, add loading spinner
         if (messageData.type === 'image' && !isOwnMessage) {
             content = `
@@ -3955,17 +3966,17 @@ imageInput.addEventListener('change', async (e) => {
     try {
         // Create thumbnail from file
         const thumbnailUrl = URL.createObjectURL(file);
-        
+
         // Create temporary message with circular progress indicator
         const tempMessageId = `temp-${Date.now()}`;
         const tempMessageDiv = document.createElement('div');
         tempMessageDiv.className = 'message sent image-only uploading';
         tempMessageDiv.dataset.messageId = tempMessageId;
-        
+
         // Create SVG circle for determinate progress
         const radius = 26;
         const circumference = 2 * Math.PI * radius;
-        
+
         tempMessageDiv.innerHTML = `
             <div class="message-bubble">
                 <div class="image-upload-container">
@@ -3993,7 +4004,7 @@ imageInput.addEventListener('change', async (e) => {
         const secureUrl = await uploadImageToCloudinary(file, (progress) => {
             const progressCircle = tempMessageDiv.querySelector('.circular-progress-circle');
             const progressText = tempMessageDiv.querySelector('.circular-progress-text');
-            
+
             if (progressCircle && progressText) {
                 // Calculate stroke-dashoffset for determinate progress
                 const offset = circumference - (progress / 100) * circumference;
@@ -4444,7 +4455,15 @@ function listenForTyping() {
         } else {
             // Only remove if it exists
             if (existingIndicator) {
-                existingIndicator.remove();
+                // Add fade-out animation before removal
+                existingIndicator.style.opacity = '0';
+                existingIndicator.style.marginBottom = '0';
+                // Remove after animation completes (200ms)
+                setTimeout(() => {
+                    if (existingIndicator.parentNode) {
+                        existingIndicator.remove();
+                    }
+                }, 200);
             }
         }
     });

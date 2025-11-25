@@ -1513,7 +1513,7 @@ function createMessageElement(messageData) {
     }
 
     let replyHtml = '';
-    if (!isDeleted && messageData.replyTo && !isStickerOrGif) {
+    if (!isDeleted && messageData.replyTo) {
         const replyName = messageData.replyTo.senderName || 'Unknown';
         const replyText = messageData.replyTo.text || '[Message]';
         const replyMediaUrl = messageData.replyTo.imgUrl;
@@ -1581,6 +1581,7 @@ function createMessageElement(messageData) {
         div.innerHTML = `
             <div class="media-message-wrapper">
                 ${optionsTrigger}
+                ${replyHtml}
                 ${content}
                 ${reactionsHtml}
                 ${statusLabel}

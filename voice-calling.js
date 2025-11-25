@@ -4,6 +4,31 @@
 // Production-ready voice calling with Messenger-style UI
 // Uses free STUN servers + optional free-tier TURN fallback
 
+// Firebase will be injected from script.js
+let db, doc, setDoc, getDoc, onSnapshot, deleteDoc, serverTimestamp, arrayUnion;
+
+// Wait for Firebase to be available
+const waitForFirebase = () => {
+    return new Promise((resolve) => {
+        const checkFirebase = () => {
+            if (window.db && window.firebaseImports) {
+                db = window.db;
+                doc = window.firebaseImports.doc;
+                setDoc = window.firebaseImports.setDoc;
+                getDoc = window.firebaseImports.getDoc;
+                onSnapshot = window.firebaseImports.onSnapshot;
+                deleteDoc = window.firebaseImports.deleteDoc;
+                serverTimestamp = window.firebaseImports.serverTimestamp;
+                arrayUnion = window.firebaseImports.arrayUnion;
+                resolve();
+            } else {
+                setTimeout(checkFirebase, 100);
+            }
+        };
+        checkFirebase();
+    });
+};
+
 class VoiceCallManager {
     constructor() {
         // Call state
@@ -80,6 +105,9 @@ class VoiceCallManager {
     // ===========================
     
     async initialize(currentUser, currentUserData, currentChatId, currentChatUser, currentChatUserData) {
+        // Wait for Firebase to be available
+        await waitForFirebase();
+        
         this.currentUser = currentUser;
         this.currentUserData = currentUserData;
         this.currentChatId = currentChatId;
@@ -230,12 +258,13 @@ class VoiceCallManager {
             this.updateCallStatus('Connecting...');
 
             // Get the stored offer from Firestore
-            const offerDoc = await window.db.collection('calls').doc(this.currentChatId).get();
-            if (!offerDoc.exists || !offerDoc.data().offer) {
+            const callDocRef = doc(db, 'calls', this.currentChatId);
+            const offerDocSnap = await getDoc(callDocRef);
+            if (!offerDocSnap.exists() || !offerDocSnap.data().offer) {
                 throw new Error('No offer found');
             }
 
-            const offer = offerDoc.data().offer;
+            const offer = offerDocSnap.data().offer;
 
             // Set remote description
             await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
@@ -328,16 +357,16 @@ class VoiceCallManager {
     
     async sendCallSignal(type, data) {
         try {
-            const callDocRef = window.db.collection('calls').doc(this.currentChatId);
+            const callDocRef = doc(db, 'calls', this.currentChatId);
             
             const signalData = {
                 [type]: data,
                 sender: this.currentUser.uid,
                 receiver: this.currentChatUser,
-                timestamp: window.firebase.firestore.serverTimestamp()
+                timestamp: serverTimestamp()
             };
 
-            await callDocRef.set(signalData, { merge: true });
+            await setDoc(callDocRef, signalData, { merge: true });
             console.log(`Sent ${type}:`, data);
         } catch (error) {
             console.error(`Error sending ${type}:`, error);
@@ -346,14 +375,10 @@ class VoiceCallManager {
 
     async sendIceCandidate(candidate) {
         try {
-            const candidatesRef = window.db
-                .collection('calls')
-                .doc(this.currentChatId)
-                .collection('iceCandidates')
-                .doc(this.currentUser.uid);
+            const candidatesRef = doc(db, 'calls', this.currentChatId, 'iceCandidates', this.currentUser.uid);
 
-            await candidatesRef.set({
-                candidates: window.firebase.firestore.arrayUnion(candidate)
+            await setDoc(candidatesRef, {
+                candidates: arrayUnion(candidate)
             }, { merge: true });
         } catch (error) {
             console.error('Error sending ICE candidate:', error);
@@ -365,26 +390,24 @@ class VoiceCallManager {
             this.unsubscribeCallAnswer();
         }
 
-        this.unsubscribeCallAnswer = window.db
-            .collection('calls')
-            .doc(this.currentChatId)
-            .onSnapshot(async (doc) => {
-                if (doc.exists && doc.data().answer) {
-                    const answer = doc.data().answer;
-                    if (this.peerConnection && this.peerConnection.signalingState === 'have-local-offer') {
-                        try {
-                            await this.peerConnection.setRemoteDescription(
-                                new RTCSessionDescription(answer)
-                            );
-                            console.log('Answer received and set');
-                            this.callState = 'connecting';
-                            this.updateCallStatus('Connecting...');
-                        } catch (error) {
-                            console.error('Error setting remote description:', error);
-                        }
+        const callDocRef = doc(db, 'calls', this.currentChatId);
+        this.unsubscribeCallAnswer = onSnapshot(callDocRef, async (docSnap) => {
+            if (docSnap.exists() && docSnap.data().answer) {
+                const answer = docSnap.data().answer;
+                if (this.peerConnection && this.peerConnection.signalingState === 'have-local-offer') {
+                    try {
+                        await this.peerConnection.setRemoteDescription(
+                            new RTCSessionDescription(answer)
+                        );
+                        console.log('Answer received and set');
+                        this.callState = 'connecting';
+                        this.updateCallStatus('Connecting...');
+                    } catch (error) {
+                        console.error('Error setting remote description:', error);
                     }
                 }
-            });
+            }
+        });
     }
 
     listenForIceCandidates() {
@@ -392,24 +415,20 @@ class VoiceCallManager {
             this.unsubscribeIceCandidates();
         }
 
-        this.unsubscribeIceCandidates = window.db
-            .collection('calls')
-            .doc(this.currentChatId)
-            .collection('iceCandidates')
-            .doc(this.currentChatUser)
-            .onSnapshot((doc) => {
-                if (doc.exists && doc.data().candidates) {
-                    const candidates = doc.data().candidates;
-                    candidates.forEach(async (candidate) => {
-                        try {
-                            if (this.peerConnection) {
-                                await this.peerConnection.addIceCandidate(
-                                    new RTCIceCandidate(candidate)
-                                );
-                                console.log('ICE candidate added');
-                            }
-                        } catch (error) {
-                            console.error('Error adding ICE candidate:', error);
+        const candidatesRef = doc(db, 'calls', this.currentChatId, 'iceCandidates', this.currentChatUser);
+        this.unsubscribeIceCandidates = onSnapshot(candidatesRef, (docSnap) => {
+            if (docSnap.exists() && docSnap.data().candidates) {
+                const candidates = docSnap.data().candidates;
+                candidates.forEach(async (candidate) => {
+                    try {
+                        if (this.peerConnection) {
+                            await this.peerConnection.addIceCandidate(
+                                new RTCIceCandidate(candidate)
+                            );
+                            console.log('ICE candidate added');
+                        }
+                    } catch (error) {
+                        console.error('Error adding ICE candidate:', error);
                         }
                     });
                 }
@@ -502,7 +521,8 @@ class VoiceCallManager {
 
             // Clear call data from Firestore
             try {
-                await window.db.collection('calls').doc(this.currentChatId).delete();
+                const callDocRef = doc(db, 'calls', this.currentChatId);
+                await deleteDoc(callDocRef);
             } catch (e) {
                 console.log('Call document already deleted or does not exist');
             }

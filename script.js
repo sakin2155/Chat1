@@ -5575,3 +5575,17 @@ async function initializeVoiceCalling() {
 
 // Expose voice call manager to window for debugging
 window.voiceCallManager = voiceCallManager;
+
+// ===========================
+// Expose Firebase to voice-calling.js
+// ===========================
+window.db = db;
+window.firebaseImports = {
+    doc,
+    setDoc,
+    getDoc,
+    onSnapshot,
+    deleteDoc,
+    serverTimestamp,
+    arrayUnion
+};

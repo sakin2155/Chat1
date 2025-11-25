@@ -1320,6 +1320,9 @@ async function openChat(userData) {
 
     // Load and apply theme for this chat
     loadThemeForChat();
+
+    // Initialize voice calling system
+    initializeVoiceCalling();
 }
 
 backToUsersBtn.addEventListener('click', () => {
@@ -5533,3 +5536,42 @@ function getTimeAgo(date) {
 // Initialize Games Launcher
 // ===========================
 setupGamesLauncher();
+
+// ===========================
+// Voice Calling System Integration
+// ===========================
+
+let voiceCallManager = null;
+
+async function initializeVoiceCalling() {
+    if (!currentUser || !currentChatUser || !currentUserData) {
+        console.warn('Cannot initialize voice calling: missing user data');
+        return;
+    }
+
+    // Create or reinitialize the voice call manager
+    if (!voiceCallManager) {
+        voiceCallManager = new VoiceCallManager();
+    }
+
+    try {
+        await voiceCallManager.initialize(
+            currentUser,
+            currentUserData,
+            currentChatId,
+            currentChatUser,
+            {
+                uid: currentChatUser,
+                displayName: document.getElementById('chat-user-name').textContent,
+                photoURL: document.getElementById('chat-user-avatar').style.backgroundImage?.replace(/url\(["']?([^"']*)["']?\)/g, '$1') || '?'
+            }
+        );
+
+        console.log('Voice calling system initialized for chat:', currentChatId);
+    } catch (error) {
+        console.error('Error initializing voice calling:', error);
+    }
+}
+
+// Expose voice call manager to window for debugging
+window.voiceCallManager = voiceCallManager;

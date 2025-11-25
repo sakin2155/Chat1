@@ -4,6 +4,12 @@
 let auth, db, storage;
 let firebaseReady = false;
 
+// ===========================
+// Cloudinary Configuration
+// ===========================
+const CLOUDINARY_CLOUD_NAME = "dxhn3fzfu";
+const CLOUDINARY_UPLOAD_PRESET = "chat123";
+
 function initializeFirebase() {
     if (window.auth && window.db && window.storage) {
         auth = window.auth;
@@ -66,6 +72,8 @@ let currentUser = null;
 let allUsers = [];
 let allMedia = [];
 let currentMediaFilter = 'all';
+let allStickers = [];
+let allBackgrounds = [];
 
 // ===========================
 // DOM Elements
@@ -110,7 +118,7 @@ document.getElementById('passwordToggle').addEventListener('click', (e) => {
     e.preventDefault();
     const input = document.getElementById('passwordInput');
     const toggle = document.getElementById('passwordToggle');
-    
+
     if (input.type === 'password') {
         input.type = 'text';
         toggle.style.color = 'var(--primary)';
@@ -127,13 +135,13 @@ navItems.forEach(item => {
     item.addEventListener('click', () => {
         const sectionId = item.dataset.section + 'Section';
         showSection(sectionId);
-        
+
         // Update active nav item
         navItems.forEach(nav => nav.classList.remove('active'));
         item.classList.add('active');
 
         // Update page title
-        document.querySelector('.page-title').textContent = 
+        document.querySelector('.page-title').textContent =
             item.querySelector('span').textContent;
 
         // Close sidebar on mobile
@@ -176,6 +184,8 @@ async function loadDashboardData() {
         await Promise.all([
             loadUsers(),
             loadMedia(),
+            loadStickers(),
+            loadBackgrounds(),
             loadInfrastructureData(),
             initializeNotificationsAdmin()
         ]);
@@ -246,7 +256,7 @@ function renderUsers(users) {
 document.getElementById('userSearch').addEventListener('input', (e) => {
     const query = e.target.value.toLowerCase();
     const sortBy = document.getElementById('userSortBy').value;
-    let filtered = allUsers.filter(user => 
+    let filtered = allUsers.filter(user =>
         user.displayName?.toLowerCase().includes(query) ||
         user.id.toLowerCase().includes(query)
     );
@@ -258,7 +268,7 @@ document.getElementById('userSearch').addEventListener('input', (e) => {
 document.getElementById('userSortBy').addEventListener('change', (e) => {
     const query = document.getElementById('userSearch').value.toLowerCase();
     const sortBy = e.target.value;
-    let filtered = allUsers.filter(user => 
+    let filtered = allUsers.filter(user =>
         user.displayName?.toLowerCase().includes(query) ||
         user.id.toLowerCase().includes(query)
     );
@@ -268,7 +278,7 @@ document.getElementById('userSortBy').addEventListener('change', (e) => {
 
 function sortUsers(users, sortBy) {
     const sorted = [...users];
-    switch(sortBy) {
+    switch (sortBy) {
         case 'name':
             sorted.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
             break;
@@ -333,7 +343,7 @@ async function cleanupExpiredStories() {
         for (const doc of storiesSnapshot.docs) {
             const storyData = doc.data();
             const uploadedAt = storyData.uploadedAt?.toMillis?.() || storyData.uploadedAt || 0;
-            
+
             // Delete if older than 24 hours
             if (now - uploadedAt > expiryTime) {
                 try {
@@ -352,10 +362,10 @@ async function cleanupExpiredStories() {
 async function loadMedia() {
     try {
         document.getElementById('mediaLoading').classList.remove('hidden');
-        
+
         // Clean up expired stories first
         await cleanupExpiredStories();
-        
+
         allMedia = [];
 
         // Load gallery feed media
@@ -405,7 +415,7 @@ async function loadMedia() {
             const messagesSnapshot = await chatDoc.ref.collection('messages').get();
             messagesSnapshot.forEach(msgDoc => {
                 const msgData = msgDoc.data();
-                
+
                 // Sent media (ONLY images sent in chat, NOT gifs or stickers)
                 if (msgData.type === 'image' && (msgData.imgUrl || msgData.imageUrl)) {
                     const mediaUrl = msgData.imgUrl || msgData.imageUrl;
@@ -418,7 +428,7 @@ async function loadMedia() {
                         messageId: msgDoc.id
                     });
                 }
-                
+
                 // Profile shared messages
                 if (msgData.type === 'profile' && msgData.profileImage) {
                     allMedia.push({
@@ -457,10 +467,10 @@ function renderMedia(media) {
     media.forEach(item => {
         const mediaItem = document.createElement('div');
         mediaItem.className = 'media-item';
-        
+
         // Get media type badge
         const typeBadge = getMediaTypeBadge(item.type);
-        
+
         mediaItem.innerHTML = `
             <img src="${item.imageUrl}" alt="${item.title || 'Media'}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect fill=%22%23333%22 width=%22100%22 height=%22100%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2214%22%3EImage Error%3C/text%3E%3C/svg%3E'">
             <div class="media-overlay">
@@ -501,10 +511,10 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.add('active');
         currentMediaFilter = btn.dataset.filter;
 
-        const filtered = currentMediaFilter === 'all' 
-            ? allMedia 
+        const filtered = currentMediaFilter === 'all'
+            ? allMedia
             : allMedia.filter(item => item.type === currentMediaFilter);
-        
+
         renderMedia(filtered);
     });
 });
@@ -630,7 +640,7 @@ async function loadInfrastructureData() {
         // Load database stats
         const usersSnapshot = await db.collection('users').get();
         const messagesSnapshot = await db.collection('chats').get();
-        
+
         let totalMessages = 0;
         messagesSnapshot.forEach(doc => {
             const data = doc.data();
@@ -667,7 +677,7 @@ async function initializeNotificationsAdmin() {
         // Load users for recipient dropdown
         const usersSnapshot = await db.collection('users').get();
         const recipientSelect = document.getElementById('notificationRecipient');
-        
+
         usersSnapshot.forEach(doc => {
             const user = doc.data();
             const option = document.createElement('option');
@@ -807,14 +817,14 @@ async function loadNotificationHistory() {
                         ...doc.data()
                     });
                 });
-                
+
                 // Sort by timestamp in JavaScript (newest first)
                 sentNotifications.sort((a, b) => {
                     const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp) || 0;
                     const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp) || 0;
                     return timeB - timeA;
                 });
-                
+
                 console.log('Notification history loaded:', sentNotifications.length);
                 renderNotificationHistory();
             }, (error) => {
@@ -868,7 +878,7 @@ function getTimeAgoAdmin(date) {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    
+
     return date.toLocaleDateString();
 }
 
@@ -899,3 +909,663 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// Add event listeners for new sections
+document.addEventListener('DOMContentLoaded', function() {
+    // Sticker Management
+    const uploadStickerBtn = document.getElementById('uploadStickerBtn');
+    const stickerUploadSection = document.getElementById('stickerUploadSection');
+    const cancelStickerUploadBtn = document.getElementById('cancelStickerUploadBtn');
+    const confirmStickerUploadBtn = document.getElementById('confirmStickerUploadBtn');
+    const stickerFileInput = document.getElementById('stickerFileInput');
+    const stickerUploadArea = document.getElementById('stickerUploadArea');
+    const stickerSearch = document.getElementById('stickerSearch');
+    
+    if (uploadStickerBtn) {
+        uploadStickerBtn.addEventListener('click', () => {
+            stickerUploadSection.classList.remove('hidden');
+        });
+    }
+    
+    if (cancelStickerUploadBtn) {
+        cancelStickerUploadBtn.addEventListener('click', () => {
+            stickerUploadSection.classList.add('hidden');
+            if (stickerFileInput) stickerFileInput.value = '';
+        });
+    }
+    
+    if (confirmStickerUploadBtn) {
+        confirmStickerUploadBtn.addEventListener('click', handleStickerUpload);
+    }
+    
+    // Drag and drop support for sticker upload
+    if (stickerUploadArea) {
+        stickerUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            stickerUploadArea.classList.add('drag-over');
+        });
+        
+        stickerUploadArea.addEventListener('dragleave', () => {
+            stickerUploadArea.classList.remove('drag-over');
+        });
+        
+        stickerUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            stickerUploadArea.classList.remove('drag-over');
+            
+            if (e.dataTransfer.files.length) {
+                if (stickerFileInput) {
+                    stickerFileInput.files = e.dataTransfer.files;
+                }
+            }
+        });
+        
+        // Click to browse - only if upload section is visible
+        stickerUploadArea.addEventListener('click', () => {
+            if (stickerFileInput && !stickerFileInput.disabled && !stickerUploadSection.classList.contains('hidden')) {
+                stickerFileInput.click();
+            }
+        });
+    }
+    
+    // File input change listener for sticker
+    if (stickerFileInput) {
+        stickerFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Show preview
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const previewContainer = document.getElementById('stickerPreviewContainer');
+                    const previewImage = document.getElementById('stickerPreviewImage');
+                    const previewFilename = document.getElementById('stickerPreviewFilename');
+                    const previewSize = document.getElementById('stickerPreviewSize');
+                    
+                    previewImage.src = event.target.result;
+                    previewFilename.textContent = file.name;
+                    previewSize.textContent = (file.size / 1024).toFixed(2) + ' KB';
+                    previewContainer.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+    
+    // Remove preview button for sticker
+    const stickerRemovePreviewBtn = document.getElementById('stickerRemovePreviewBtn');
+    if (stickerRemovePreviewBtn) {
+        stickerRemovePreviewBtn.addEventListener('click', () => {
+            document.getElementById('stickerPreviewContainer').classList.add('hidden');
+            stickerFileInput.value = '';
+        });
+    }
+    
+    // Search functionality for stickers
+    if (stickerSearch) {
+        stickerSearch.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            filterStickers(query);
+        });
+    }
+    
+    // Background Management
+    const uploadBackgroundBtn = document.getElementById('uploadBackgroundBtn');
+    const backgroundUploadSection = document.getElementById('backgroundUploadSection');
+    const cancelBackgroundUploadBtn = document.getElementById('cancelBackgroundUploadBtn');
+    const confirmBackgroundUploadBtn = document.getElementById('confirmBackgroundUploadBtn');
+    const backgroundFileInput = document.getElementById('backgroundFileInput');
+    const backgroundNameInput = document.getElementById('backgroundNameInput');
+    const backgroundUploadArea = document.getElementById('backgroundUploadArea');
+    const backgroundSearch = document.getElementById('backgroundSearch');
+    
+    if (uploadBackgroundBtn) {
+        uploadBackgroundBtn.addEventListener('click', () => {
+            backgroundUploadSection.classList.remove('hidden');
+        });
+    }
+    
+    if (cancelBackgroundUploadBtn) {
+        cancelBackgroundUploadBtn.addEventListener('click', () => {
+            backgroundUploadSection.classList.add('hidden');
+            if (backgroundFileInput) backgroundFileInput.value = '';
+            if (backgroundNameInput) backgroundNameInput.value = '';
+        });
+    }
+    
+    if (confirmBackgroundUploadBtn) {
+        confirmBackgroundUploadBtn.addEventListener('click', handleBackgroundUpload);
+    }
+    
+    // Drag and drop support for background upload
+    if (backgroundUploadArea) {
+        backgroundUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            backgroundUploadArea.classList.add('drag-over');
+        });
+        
+        backgroundUploadArea.addEventListener('dragleave', () => {
+            backgroundUploadArea.classList.remove('drag-over');
+        });
+        
+        backgroundUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            backgroundUploadArea.classList.remove('drag-over');
+            
+            if (e.dataTransfer.files.length) {
+                if (backgroundFileInput) {
+                    backgroundFileInput.files = e.dataTransfer.files;
+                }
+            }
+        });
+        
+        // Click to browse - only if upload section is visible
+        backgroundUploadArea.addEventListener('click', () => {
+            if (backgroundFileInput && !backgroundFileInput.disabled && !backgroundUploadSection.classList.contains('hidden')) {
+                backgroundFileInput.click();
+            }
+        });
+    }
+    
+    // File input change listener for background
+    if (backgroundFileInput) {
+        backgroundFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Show preview
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const previewContainer = document.getElementById('backgroundPreviewContainer');
+                    const previewImage = document.getElementById('backgroundPreviewImage');
+                    const previewFilename = document.getElementById('backgroundPreviewFilename');
+                    const previewSize = document.getElementById('backgroundPreviewSize');
+                    
+                    previewImage.src = event.target.result;
+                    previewFilename.textContent = file.name;
+                    previewSize.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+                    previewContainer.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+    
+    // Remove preview button for background
+    const backgroundRemovePreviewBtn = document.getElementById('backgroundRemovePreviewBtn');
+    if (backgroundRemovePreviewBtn) {
+        backgroundRemovePreviewBtn.addEventListener('click', () => {
+            document.getElementById('backgroundPreviewContainer').classList.add('hidden');
+            backgroundFileInput.value = '';
+        });
+    }
+    
+    // Search functionality for backgrounds
+    if (backgroundSearch) {
+        backgroundSearch.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            filterBackgrounds(query);
+        });
+    }
+});
+
+// Filter stickers based on search query
+function filterStickers(query) {
+    const stickerItems = document.querySelectorAll('#stickersGrid .media-item');
+    let hasVisibleItems = false;
+    
+    stickerItems.forEach(item => {
+        const title = item.querySelector('.media-title');
+        const text = title ? title.textContent.toLowerCase() : '';
+        
+        if (query === '' || text.includes(query)) {
+            item.style.display = 'block';
+            hasVisibleItems = true;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    // Show empty state if no items match
+    const emptyState = document.getElementById('stickersEmptyState');
+    if (emptyState) {
+        if (hasVisibleItems || query === '') {
+            emptyState.classList.add('hidden');
+        } else {
+            emptyState.classList.remove('hidden');
+        }
+    }
+}
+
+// Filter backgrounds based on search query
+function filterBackgrounds(query) {
+    const backgroundItems = document.querySelectorAll('#backgroundsGrid .media-item');
+    let hasVisibleItems = false;
+    
+    backgroundItems.forEach(item => {
+        const title = item.querySelector('.media-title');
+        const text = title ? title.textContent.toLowerCase() : '';
+        
+        if (query === '' || text.includes(query)) {
+            item.style.display = 'block';
+            hasVisibleItems = true;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    // Show empty state if no items match
+    const emptyState = document.getElementById('backgroundsEmptyState');
+    if (emptyState) {
+        if (hasVisibleItems || query === '') {
+            emptyState.classList.add('hidden');
+        } else {
+            emptyState.classList.remove('hidden');
+        }
+    }
+}
+
+// ===========================
+// Sticker Management
+// ===========================
+async function loadStickers() {
+    try {
+        document.getElementById('stickersLoading').classList.remove('hidden');
+        const snapshot = await db.collection('admin_stickers').orderBy('uploadedAt', 'desc').get();
+        allStickers = [];
+        
+        snapshot.forEach(doc => {
+            allStickers.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+        
+        renderStickers(allStickers);
+        document.getElementById('stickersLoading').classList.add('hidden');
+        
+        // Show empty state if no stickers
+        const emptyState = document.getElementById('stickersEmptyState');
+        if (emptyState) {
+            if (allStickers.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading stickers:', error);
+        document.getElementById('stickersLoading').classList.add('hidden');
+        
+        // Show error state
+        const grid = document.getElementById('stickersGrid');
+        if (grid) {
+            grid.innerHTML = `
+                <div class="error-state">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    <h3>Error Loading Stickers</h3>
+                    <p>Failed to load stickers. Please try again later.</p>
+                    <button class="btn btn-primary" onclick="loadStickers()">Retry</button>
+                </div>
+            `;
+        }
+    }
+}
+
+function renderStickers(stickers) {
+    const stickersGrid = document.getElementById('stickersGrid');
+    stickersGrid.innerHTML = '';
+    
+    if (stickers.length === 0) {
+        return;
+    }
+    
+    stickers.forEach(sticker => {
+        const stickerItem = document.createElement('div');
+        stickerItem.className = 'media-item';
+        
+        // Format upload date
+        let uploadDate = '';
+        if (sticker.uploadedAt) {
+            const date = sticker.uploadedAt.toDate ? sticker.uploadedAt.toDate() : new Date(sticker.uploadedAt);
+            uploadDate = date.toLocaleDateString();
+        }
+        
+        // Generate a friendly name for the sticker
+        const stickerName = `Sticker #${sticker.id.substring(0, 8)}`;
+        
+        stickerItem.innerHTML = `
+            <img src="${sticker.url}" alt="${stickerName}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect fill=%22%23333%22 width=%22100%22 height=%22100%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2214%22%3EImage Error%3C/text%3E%3C/svg%3E'">
+            <div class="media-overlay">
+                <div class="media-info">
+                    <span class="media-type-badge">Sticker</span>
+                    <p class="media-title" title="${stickerName}">${stickerName}</p>
+                    <p class="media-date">${uploadDate}</p>
+                </div>
+                <button class="media-delete-btn" onclick="deleteSticker('${sticker.id}')" title="Delete sticker">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        `;
+        stickersGrid.appendChild(stickerItem);
+    });
+}
+
+async function handleStickerUpload() {
+    const stickerFileInput = document.getElementById('stickerFileInput');
+    const file = stickerFileInput.files[0];
+    
+    if (!file) {
+        showAlert('Error', 'Please select a sticker file');
+        return;
+    }
+    
+    // Validate file type
+    const validTypes = ['image/png', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+        showAlert('Error', 'Please select a valid image file (PNG, WebP, or GIF)');
+        return;
+    }
+    
+    try {
+        // Show progress container
+        const progressContainer = document.getElementById('stickerProgressContainer');
+        const progressBar = document.getElementById('stickerProgressBar');
+        const progressPercent = document.getElementById('stickerProgressPercent');
+        progressContainer.classList.remove('hidden');
+        
+        // Upload to Cloudinary with progress tracking
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'chat123');
+        
+        const xhr = new XMLHttpRequest();
+        
+        // Track upload progress
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                progressBar.style.width = percentComplete + '%';
+                progressPercent.textContent = Math.round(percentComplete) + '%';
+            }
+        });
+        
+        // Handle completion
+        xhr.addEventListener('load', async () => {
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                
+                if (data.secure_url) {
+                    // Save to Firestore
+                    await db.collection('admin_stickers').add({
+                        url: data.secure_url,
+                        uploadedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        uploadedBy: 'admin'
+                    });
+                    
+                    // Reset form
+                    document.getElementById('stickerUploadSection').classList.add('hidden');
+                    document.getElementById('stickerPreviewContainer').classList.add('hidden');
+                    progressContainer.classList.add('hidden');
+                    stickerFileInput.value = '';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+                    
+                    // Reload stickers
+                    await loadStickers();
+                    showAlert('Success', 'Sticker uploaded successfully');
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } else {
+                throw new Error('Upload failed');
+            }
+        });
+        
+        xhr.addEventListener('error', () => {
+            progressContainer.classList.add('hidden');
+            showAlert('Error', 'Failed to upload sticker');
+        });
+        
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`);
+        xhr.send(formData);
+        
+    } catch (error) {
+        console.error('Error uploading sticker:', error);
+        document.getElementById('stickerProgressContainer').classList.add('hidden');
+        showAlert('Error', 'Failed to upload sticker');
+    }
+}
+
+async function deleteSticker(stickerId) {
+    showConfirmation(
+        'Delete Sticker',
+        'Are you sure you want to delete this sticker? This action cannot be undone.',
+        async () => {
+            try {
+                await db.collection('admin_stickers').doc(stickerId).delete();
+                await loadStickers();
+                showAlert('Success', 'Sticker deleted successfully');
+            } catch (error) {
+                console.error('Error deleting sticker:', error);
+                showAlert('Error', 'Failed to delete sticker');
+            }
+        }
+    );
+}
+
+// ===========================
+// Background Management
+// ===========================
+async function loadBackgrounds() {
+    try {
+        document.getElementById('backgroundsLoading').classList.remove('hidden');
+        const snapshot = await db.collection('admin_backgrounds').orderBy('uploadedAt', 'desc').get();
+        allBackgrounds = [];
+        
+        snapshot.forEach(doc => {
+            allBackgrounds.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+        
+        renderBackgrounds(allBackgrounds);
+        document.getElementById('backgroundsLoading').classList.add('hidden');
+        
+        // Show empty state if no backgrounds
+        const emptyState = document.getElementById('backgroundsEmptyState');
+        if (emptyState) {
+            if (allBackgrounds.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading backgrounds:', error);
+        document.getElementById('backgroundsLoading').classList.add('hidden');
+        
+        // Show error state
+        const grid = document.getElementById('backgroundsGrid');
+        if (grid) {
+            grid.innerHTML = `
+                <div class="error-state">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    <h3>Error Loading Backgrounds</h3>
+                    <p>Failed to load backgrounds. Please try again later.</p>
+                    <button class="btn btn-primary" onclick="loadBackgrounds()">Retry</button>
+                </div>
+            `;
+        }
+    }
+}
+
+function renderBackgrounds(backgrounds) {
+    const backgroundsGrid = document.getElementById('backgroundsGrid');
+    backgroundsGrid.innerHTML = '';
+    
+    if (backgrounds.length === 0) {
+        return;
+    }
+    
+    backgrounds.forEach(background => {
+        const backgroundItem = document.createElement('div');
+        backgroundItem.className = 'media-item';
+        
+        // Format upload date
+        let uploadDate = '';
+        if (background.uploadedAt) {
+            const date = background.uploadedAt.toDate ? background.uploadedAt.toDate() : new Date(background.uploadedAt);
+            uploadDate = date.toLocaleDateString();
+        }
+        
+        // Use background name or generate a friendly name
+        const backgroundName = background.name || `Background #${background.id.substring(0, 8)}`;
+        
+        backgroundItem.innerHTML = `
+            <img src="${background.thumbnailUrl || background.url}" alt="${backgroundName}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect fill=%22%23333%22 width=%22100%22 height=%22100%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2214%22%3EImage Error%3C/text%3E%3C/svg%3E'">
+            <div class="media-overlay">
+                <div class="media-info">
+                    <span class="media-type-badge">Background</span>
+                    <p class="media-title" title="${backgroundName}">${backgroundName}</p>
+                    <p class="media-date">${uploadDate}</p>
+                </div>
+                <button class="media-delete-btn" onclick="deleteBackground('${background.id}')" title="Delete background">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        `;
+        backgroundsGrid.appendChild(backgroundItem);
+    });
+}
+
+async function handleBackgroundUpload() {
+    const backgroundFileInput = document.getElementById('backgroundFileInput');
+    const backgroundNameInput = document.getElementById('backgroundNameInput');
+    const file = backgroundFileInput.files[0];
+    const name = backgroundNameInput.value.trim();
+    
+    if (!file) {
+        showAlert('Error', 'Please select a background file');
+        return;
+    }
+    
+    if (!name) {
+        showAlert('Error', 'Please enter a background name');
+        return;
+    }
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+        showAlert('Error', 'Please select a valid image file (JPG or PNG)');
+        return;
+    }
+    
+    try {
+        // Show progress container
+        const progressContainer = document.getElementById('backgroundProgressContainer');
+        const progressBar = document.getElementById('backgroundProgressBar');
+        const progressPercent = document.getElementById('backgroundProgressPercent');
+        progressContainer.classList.remove('hidden');
+        
+        // Upload to Cloudinary with progress tracking
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'chat123');
+        
+        const xhr = new XMLHttpRequest();
+        
+        // Track upload progress
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                progressBar.style.width = percentComplete + '%';
+                progressPercent.textContent = Math.round(percentComplete) + '%';
+            }
+        });
+        
+        // Handle completion
+        xhr.addEventListener('load', async () => {
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                
+                if (data.secure_url) {
+                    // Generate thumbnail URL by transforming the image
+                    const thumbnailUrl = data.secure_url.replace('/upload/', '/upload/c_thumb,w_200,h_200/');
+                    
+                    // Save to Firestore
+                    await db.collection('admin_backgrounds').add({
+                        name: name,
+                        url: data.secure_url,
+                        thumbnailUrl: thumbnailUrl,
+                        uploadedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        uploadedBy: 'admin'
+                    });
+                    
+                    // Reset form
+                    document.getElementById('backgroundUploadSection').classList.add('hidden');
+                    document.getElementById('backgroundPreviewContainer').classList.add('hidden');
+                    progressContainer.classList.add('hidden');
+                    backgroundFileInput.value = '';
+                    backgroundNameInput.value = '';
+                    progressBar.style.width = '0%';
+                    progressPercent.textContent = '0%';
+                    
+                    // Reload backgrounds
+                    await loadBackgrounds();
+                    showAlert('Success', 'Background uploaded successfully');
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } else {
+                throw new Error('Upload failed');
+            }
+        });
+        
+        xhr.addEventListener('error', () => {
+            progressContainer.classList.add('hidden');
+            showAlert('Error', 'Failed to upload background');
+        });
+        
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`);
+        xhr.send(formData);
+        
+    } catch (error) {
+        console.error('Error uploading background:', error);
+        document.getElementById('backgroundProgressContainer').classList.add('hidden');
+        showAlert('Error', 'Failed to upload background');
+    }
+}
+
+async function deleteBackground(backgroundId) {
+    showConfirmation(
+        'Delete Background',
+        'Are you sure you want to delete this background? This action cannot be undone.',
+        async () => {
+            try {
+                await db.collection('admin_backgrounds').doc(backgroundId).delete();
+                await loadBackgrounds();
+                showAlert('Success', 'Background deleted successfully');
+            } catch (error) {
+                console.error('Error deleting background:', error);
+                showAlert('Error', 'Failed to delete background');
+            }
+        }
+    );
+}

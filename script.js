@@ -68,6 +68,10 @@ const GIPHY_RESULT_LIMIT = 28;
 const CUSTOM_STICKERS_KEY_PREFIX = 'chat-custom-stickers';
 const DEFAULT_STICKER_EMOJIS = ['😀', '😂', '😍', '😎', '🤯', '😭', '🙌', '🔥', '👍', '🎉', '💀', '🤩'];
 
+// Admin stickers and backgrounds
+let adminStickers = [];
+let adminBackgrounds = [];
+
 const PRESENCE_TIMEOUT = 15000; // 15 seconds
 const PRESENCE_UPDATE_INTERVAL = 5000; // 5 seconds
 const STORY_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -254,6 +258,8 @@ const addStickerBtn = document.getElementById('add-sticker-btn');
 const defaultStickerGrid = document.getElementById('default-sticker-grid');
 const customStickerGrid = document.getElementById('custom-sticker-grid');
 const customStickerSection = document.getElementById('custom-sticker-section');
+const adminStickerSection = document.getElementById('admin-sticker-section');
+const adminStickerGrid = document.getElementById('admin-sticker-grid');
 const stickerFileInput = document.getElementById('sticker-file-input');
 const streakBadge = document.getElementById('streak-badge');
 const streakCount = document.getElementById('streak-count');
@@ -263,6 +269,12 @@ const notificationsModal = document.getElementById('notifications-modal');
 const notificationsList = document.getElementById('notifications-list');
 const closeNotificationsBtn = document.getElementById('close-notifications');
 const notificationsBackdrop = document.querySelector('.notifications-backdrop');
+const selectAdminBgBtn = document.getElementById('select-admin-bg-btn');
+const adminBgSelectorModal = document.getElementById('admin-bg-selector-modal');
+const closeAdminBgSelectorBtn = document.getElementById('close-admin-bg-selector');
+const adminBgGrid = document.getElementById('admin-bg-grid');
+const adminBgEmpty = document.getElementById('admin-bg-empty');
+const adminBgLoading = document.getElementById('admin-bg-loading');
 
 // ===========================
 // Performance Optimizations
@@ -375,6 +387,19 @@ if (chatSettingsModal) {
     chatSettingsModal.addEventListener('click', (e) => {
         if (e.target === chatSettingsModal) {
             closeChatSettingsModal();
+        }
+    });
+}
+if (selectAdminBgBtn) {
+    selectAdminBgBtn.addEventListener('click', openAdminBgSelector);
+}
+if (closeAdminBgSelectorBtn) {
+    closeAdminBgSelectorBtn.addEventListener('click', closeAdminBgSelector);
+}
+if (adminBgSelectorModal) {
+    adminBgSelectorModal.addEventListener('click', (e) => {
+        if (e.target === adminBgSelectorModal) {
+            closeAdminBgSelector();
         }
     });
 }
@@ -846,6 +871,8 @@ onAuthStateChanged(auth, async (user) => {
             listenToCurrentUser(user.uid);
             subscribeToStories();
             loadCustomStickers(user.uid);
+            loadAdminStickers();
+            loadAdminBackgrounds();
             initializeNotificationSystem();
         } else {
             stopPresenceTracking();
@@ -3352,6 +3379,103 @@ function applyThemeToChat(theme) {
     });
 }
 
+// ===========================
+// Admin Background Selector
+// ===========================
+async function openAdminBgSelector() {
+    if (!adminBgSelectorModal) return;
+    
+    adminBgSelectorModal.classList.remove('hidden');
+    adminBgLoading.classList.remove('hidden');
+    adminBgEmpty.classList.add('hidden');
+    adminBgGrid.innerHTML = '';
+    
+    try {
+        // Fetch admin backgrounds from Firestore
+        const snapshot = await getDocs(collection(db, 'admin_backgrounds'));
+        const backgrounds = [];
+        
+        snapshot.forEach(doc => {
+            backgrounds.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+        
+        adminBgLoading.classList.add('hidden');
+        
+        if (backgrounds.length === 0) {
+            adminBgEmpty.classList.remove('hidden');
+            return;
+        }
+        
+        // Render backgrounds
+        backgrounds.forEach(bg => {
+            const bgItem = document.createElement('div');
+            bgItem.className = 'admin-bg-item';
+            bgItem.innerHTML = `
+                <img src="${bg.thumbnailUrl || bg.url}" alt="${bg.name}" onerror="this.src='${bg.url}'">
+                <div class="admin-bg-name">${bg.name}</div>
+            `;
+            
+            bgItem.addEventListener('click', () => selectAdminBackground(bg));
+            adminBgGrid.appendChild(bgItem);
+        });
+        
+    } catch (error) {
+        console.error('Error loading admin backgrounds:', error);
+        adminBgLoading.classList.add('hidden');
+        adminBgEmpty.classList.remove('hidden');
+        adminBgEmpty.innerHTML = '<p>Error loading backgrounds</p>';
+    }
+}
+
+function closeAdminBgSelector() {
+    if (adminBgSelectorModal) {
+        adminBgSelectorModal.classList.add('hidden');
+    }
+}
+
+async function selectAdminBackground(bg) {
+    if (!currentChatId) return;
+    
+    try {
+        // Update the bgImage field in the theme
+        const currentTheme = chatThemes.get(currentChatId) || getDefaultTheme();
+        const updatedTheme = {
+            ...currentTheme,
+            bgImage: bg.url,
+            bgImageOverlay: true,
+            updatedBy: currentUser.uid,
+            updatedAt: serverTimestamp()
+        };
+        
+        // Save to local map
+        chatThemes.set(currentChatId, updatedTheme);
+        
+        // Save to localStorage
+        const themesData = JSON.stringify(Array.from(chatThemes.entries()));
+        localStorage.setItem(`themes_${currentUser.uid}`, themesData);
+        
+        // Save to Firestore
+        const themeRef = doc(db, 'chats', currentChatId, 'metadata', 'theme');
+        await setDoc(themeRef, updatedTheme, { merge: true });
+        
+        // Apply theme to chat
+        applyThemeToChat(updatedTheme);
+        
+        // Close the selector modal
+        closeAdminBgSelector();
+        
+        // Show success notification
+        showNotification(`✅ Background "${bg.name}" applied!`, 2000);
+        
+    } catch (error) {
+        console.error('Error applying background:', error);
+        showNotification('❌ Failed to apply background', 2000);
+    }
+}
+
 let unsubscribeTheme = null;
 
 function loadThemeForChat() {
@@ -4472,8 +4596,14 @@ async function handleGifSelect(url) {
 // ===========================
 // Stickers
 // ===========================
-function openStickerSheet() {
+async function openStickerSheet() {
     if (!stickerSheet) return;
+    
+    // Render all sticker sections
+    renderDefaultStickers();
+    renderAdminStickers();
+    renderCustomStickers();
+    
     stickerSheet.classList.remove('hidden');
 }
 
@@ -4487,6 +4617,19 @@ function renderDefaultStickers() {
     defaultStickerGrid.innerHTML = '';
     DEFAULT_STICKERS.forEach((sticker) => {
         defaultStickerGrid.appendChild(createStickerCard(sticker.url, sticker.emoji));
+    });
+}
+
+function renderAdminStickers() {
+    if (!adminStickerGrid || !adminStickerSection) return;
+    adminStickerGrid.innerHTML = '';
+    if (!adminStickers.length) {
+        adminStickerSection.classList.add('hidden');
+        return;
+    }
+    adminStickerSection.classList.remove('hidden');
+    adminStickers.forEach((sticker) => {
+        adminStickerGrid.appendChild(createStickerCard(sticker.url, 'Admin sticker'));
     });
 }
 
@@ -4589,6 +4732,41 @@ function persistCustomStickers() {
         console.warn('Could not save stickers locally', error);
     }
 }
+
+// Load admin stickers when user is authenticated
+async function loadAdminStickers() {
+    try {
+        const snapshot = await getDocs(collection(db, 'admin_stickers'));
+        adminStickers = [];
+        snapshot.forEach(doc => {
+            adminStickers.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+        console.log('Loaded admin stickers:', adminStickers.length);
+    } catch (error) {
+        console.error('Error loading admin stickers:', error);
+    }
+}
+
+// Load admin backgrounds when user is authenticated
+async function loadAdminBackgrounds() {
+    try {
+        const snapshot = await getDocs(collection(db, 'admin_backgrounds'));
+        adminBackgrounds = [];
+        snapshot.forEach(doc => {
+            adminBackgrounds.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+        console.log('Loaded admin backgrounds:', adminBackgrounds.length);
+    } catch (error) {
+        console.error('Error loading admin backgrounds:', error);
+    }
+}
+
 
 // ===========================
 // Typing Indicator

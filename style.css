@@ -4104,6 +4104,173 @@ video.story-viewer-media {
 }
 
 /* ===========================
+   Watch Party Styles
+   =========================== */
+.watch-party-modal .watch-party-modal-content {
+    background: var(--sidebar-bg);
+    width: min(420px, 90vw);
+    padding: 28px;
+    border-radius: 20px;
+    box-shadow: 0 25px 65px rgba(0, 0, 0, 0.45);
+}
+
+.watch-party-modal h2 {
+    margin-bottom: 6px;
+}
+
+.watch-party-description {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 18px;
+}
+
+.watch-party-modal input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    font-size: 15px;
+    margin-top: 8px;
+}
+
+.watch-party-preview {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    margin-top: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+}
+
+.watch-party-thumb {
+    width: 72px;
+    height: 48px;
+    border-radius: 10px;
+    background-size: cover;
+    background-position: center;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.watch-party-preview-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: white;
+}
+
+.watch-party-preview-subtitle {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.watch-party-actions {
+    margin-top: 20px;
+}
+
+.watch-party-submit-btn {
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: none;
+    font-weight: 600;
+    font-size: 16px;
+    background: linear-gradient(135deg, #ff512f, #dd2476);
+    color: white;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.watch-party-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(221, 36, 118, 0.45);
+}
+
+.watch-party-card {
+    background: #111015;
+    border-radius: 18px;
+    padding: 14px;
+    width: min(320px, 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 15px 28px rgba(0, 0, 0, 0.35);
+}
+
+.watch-party-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.watch-party-body {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.watch-party-thumb-small {
+    width: 96px;
+    height: 60px;
+    border-radius: 12px;
+    background-size: cover;
+    background-position: center;
+    background-color: rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.watch-party-info {
+    flex: 1;
+}
+
+.watch-party-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: white;
+}
+
+.watch-party-host {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.watch-party-status {
+    margin-top: 10px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.watch-party-btn {
+    margin-top: 12px;
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.watch-party-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.watch-party-btn.expired {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* ===========================
    Voice Messaging System
    =========================== */
 

@@ -128,6 +128,9 @@ let streakCheckInterval = null;
 let userNotifications = []; // Store notifications for current user
 let unsubscribeNotifications = null; // Firestore listener for notifications
 let notificationsUnreadCount = 0; // Track unread notification count
+let watchPartyMetadataTimer = null;
+let pendingWatchPartyVideoId = null;
+let pendingWatchPartyMetadata = null;
 
 // ===========================
 // Auto-scroll Helper
@@ -275,6 +278,14 @@ const closeAdminBgSelectorBtn = document.getElementById('close-admin-bg-selector
 const adminBgGrid = document.getElementById('admin-bg-grid');
 const adminBgEmpty = document.getElementById('admin-bg-empty');
 const adminBgLoading = document.getElementById('admin-bg-loading');
+const watchPartyModal = document.getElementById('watch-party-modal');
+const watchPartyInput = document.getElementById('watch-party-url');
+const watchPartyError = document.getElementById('watch-party-error');
+const watchPartyPreview = document.getElementById('watch-party-preview');
+const watchPartyThumbnail = document.getElementById('watch-party-thumbnail');
+const watchPartyTitleEl = document.getElementById('watch-party-title');
+const createWatchPartyBtn = document.getElementById('create-watch-party-btn');
+const closeWatchPartyModalBtn = document.getElementById('close-watch-party-modal');
 
 // ===========================
 // Performance Optimizations
@@ -1406,15 +1417,16 @@ function createMessageElement(messageData) {
     const isDeleted = !!messageData.isDeleted;
     const isSystemMessage = messageData.type === 'system';
     const isGameInvite = messageData.type === 'game_invite';
+    const isWatchPartyInvite = messageData.type === 'watch_party';
     const isVoiceMessage = !isDeleted && messageData.type === 'voice';
     const isStickerOrGif = !isDeleted && (messageData.type === 'sticker' || messageData.type === 'gif');
     const isImageMessage = !isDeleted && messageData.type === 'image' && !messageData.text;
 
     // Check for single emoji
-    const isSingleEmoji = !isDeleted && !isSystemMessage && !isGameInvite && !isVoiceMessage && !isStickerOrGif && messageData.text && isSingleEmojiString(messageData.text);
+    const isSingleEmoji = !isDeleted && !isSystemMessage && !isGameInvite && !isWatchPartyInvite && !isVoiceMessage && !isStickerOrGif && messageData.text && isSingleEmojiString(messageData.text);
 
     const div = document.createElement('div');
-    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isImageMessage ? ' image-only' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}${isSingleEmoji ? ' supersized-emoji' : ''}`;
+    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isImageMessage ? ' image-only' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}${isWatchPartyInvite ? ' watch-party-message' : ''}${isSingleEmoji ? ' supersized-emoji' : ''}`;
     div.dataset.messageId = messageData.id;
     div.dataset.messageType = messageData.type || 'text';
     // Store timestamp in milliseconds for proper sorting
@@ -1471,6 +1483,38 @@ function createMessageElement(messageData) {
                 <div class="game-invite-header">${gameEmoji} Game Invite</div>
                 <div class="game-invite-text">${inviteText}</div>
                 ${buttonHtml}
+            </div>
+        `;
+    } else if (isWatchPartyInvite) {
+        const roomId = messageData.roomId;
+        const videoTitle = messageData.videoTitle || 'YouTube Video';
+        const hostName = messageData.hostName || 'Friend';
+        const thumbnailUrl = messageData.videoThumbnail || (messageData.videoId ? getDefaultThumbnail(messageData.videoId) : '');
+        const partyEnded = !!messageData.partyEnded;
+        const statusText = partyEnded
+            ? 'Watch party ended'
+            : 'Stay in sync across devices';
+        const buttonLabel = partyEnded
+            ? 'Session Ended'
+            : (isOwnMessage ? 'Open Watch Party' : 'Join Watch Party');
+        const buttonClasses = `watch-party-btn${partyEnded ? ' expired' : ''}`;
+        const buttonAttributes = partyEnded ? 'disabled' : `data-room-id="${roomId || ''}"`;
+
+        content = `
+            <div class="watch-party-card">
+                <div class="watch-party-header">
+                    <span>Watch Party</span>
+                    <span>🎬 YouTube</span>
+                </div>
+                <div class="watch-party-body">
+                    <div class="watch-party-thumb-small" style="${thumbnailUrl ? `background-image: url('${thumbnailUrl}');` : ''}"></div>
+                    <div class="watch-party-info">
+                        <div class="watch-party-title">${escapeHtml(videoTitle)}</div>
+                        <div class="watch-party-host">Host • ${escapeHtml(hostName)}</div>
+                    </div>
+                </div>
+                <div class="watch-party-status">${statusText}</div>
+                <button class="${buttonClasses}" ${buttonAttributes}>${buttonLabel}</button>
             </div>
         `;
     } else if (messageData.type === 'voice') {
@@ -1865,6 +1909,33 @@ function createMessageElement(messageData) {
             }
         }
 
+        if (isWatchPartyInvite) {
+            const watchPartyBtn = div.querySelector('.watch-party-btn');
+            if (watchPartyBtn && !watchPartyBtn.classList.contains('expired')) {
+                watchPartyBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const roomId = watchPartyBtn.dataset.roomId;
+                    if (!roomId) return;
+
+                    try {
+                        // Refresh message to ensure it's still active
+                        if (messageData.id) {
+                            const messageRef = doc(db, 'chats', currentChatId, 'messages', messageData.id);
+                            await updateDoc(messageRef, {
+                                partyEnded: false,
+                                updatedAt: serverTimestamp()
+                            });
+                        }
+                    } catch (error) {
+                        console.warn('Unable to update watch party message:', error);
+                    }
+
+                    const joinMode = isOwnMessage ? 'host' : 'guest';
+                    window.location.href = `watch.html?roomId=${roomId}&mode=${joinMode}&chatId=${currentChatId}`;
+                });
+            }
+        }
+
         // Voice message playback
         if (messageData.type === 'voice' && messageData.voiceUrl) {
             const playBtn = div.querySelector('.voice-play-btn-inline');
@@ -1957,9 +2028,18 @@ function updateMessage(messageId, messageData) {
     const isOwnMessage = messageData.senderId === currentUser.uid;
     const isDeleted = !!messageData.isDeleted;
     const isGameInvite = messageData.type === 'game_invite';
+    const isWatchPartyInvite = messageData.type === 'watch_party';
 
     // If message is deleted or content changed significantly, replace entire element
     if (isDeleted || messageEl.classList.contains('deleted') !== isDeleted) {
+        const mergedData = { id: messageId, ...messageData };
+        const newEl = createMessageElement(mergedData);
+        messagesContainer.replaceChild(newEl, messageEl);
+        updateMessageStatusVisibility();
+        return;
+    }
+
+    if (isWatchPartyInvite) {
         const mergedData = { id: messageId, ...messageData };
         const newEl = createMessageElement(mergedData);
         messagesContainer.replaceChild(newEl, messageEl);
@@ -4230,6 +4310,295 @@ async function handleGameInvite(gameType = 'tictactoe') {
 }
 
 // ===========================
+// Watch Parties
+// ===========================
+function generateWatchPartyId() {
+    return 'watch_' + Math.random().toString(36).substr(2, 9);
+}
+
+function openWatchPartyModal() {
+    if (!watchPartyModal) return;
+    if (!currentChatId) {
+        alert('Select a chat conversation first.');
+        return;
+    }
+
+    watchPartyModal.classList.remove('hidden');
+    if (watchPartyInput) {
+        watchPartyInput.focus();
+        watchPartyInput.select();
+    }
+}
+
+function closeWatchPartyModal() {
+    if (!watchPartyModal) return;
+    watchPartyModal.classList.add('hidden');
+    resetWatchPartyModal();
+}
+
+function resetWatchPartyModal() {
+    if (watchPartyInput) {
+        watchPartyInput.value = '';
+    }
+    if (watchPartyError) {
+        watchPartyError.textContent = '';
+        watchPartyError.classList.add('hidden');
+    }
+    if (watchPartyPreview) {
+        watchPartyPreview.classList.add('hidden');
+    }
+    if (watchPartyThumbnail) {
+        watchPartyThumbnail.style.backgroundImage = '';
+    }
+    pendingWatchPartyVideoId = null;
+    pendingWatchPartyMetadata = null;
+}
+
+function extractYouTubeVideoId(value) {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    // Direct 11-char ID
+    if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+        return trimmed;
+    }
+
+    try {
+        let urlToParse = trimmed;
+        if (!/^https?:\/\//i.test(urlToParse)) {
+            urlToParse = `https://${urlToParse}`;
+        }
+        const url = new URL(urlToParse);
+
+        if (url.hostname.includes('youtu.be')) {
+            const pathSegments = url.pathname.split('/').filter(Boolean);
+            if (pathSegments.length > 0 && /^[a-zA-Z0-9_-]{11}$/.test(pathSegments[0])) {
+                return pathSegments[0];
+            }
+        }
+
+        if (url.searchParams.has('v')) {
+            const id = url.searchParams.get('v');
+            if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) {
+                return id;
+            }
+        }
+
+        const embedMatch = url.pathname.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+        if (embedMatch && embedMatch[1]) {
+            return embedMatch[1];
+        }
+    } catch (error) {
+        const fallbackMatch = trimmed.match(/([a-zA-Z0-9_-]{11})/);
+        if (fallbackMatch && fallbackMatch[1]) {
+            return fallbackMatch[1];
+        }
+    }
+
+    return null;
+}
+
+async function fetchYouTubeMetadata(videoId) {
+    const endpoint = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+    try {
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+            throw new Error(`YouTube metadata failed: ${response.status}`);
+        }
+        const data = await response.json();
+        return {
+            title: data.title,
+            thumbnail: data.thumbnail_url
+        };
+    } catch (error) {
+        console.warn('Unable to fetch YouTube metadata:', error);
+        return null;
+    }
+}
+
+function getDefaultThumbnail(videoId) {
+    return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+}
+
+function updateWatchPartyPreviewUI(videoId, metadata) {
+    if (!watchPartyPreview || !watchPartyThumbnail || !watchPartyTitleEl) return;
+    const thumbnail = metadata?.thumbnail || getDefaultThumbnail(videoId);
+    watchPartyThumbnail.style.backgroundImage = `url('${thumbnail}')`;
+    watchPartyTitleEl.textContent = metadata?.title || 'YouTube Video';
+    watchPartyPreview.classList.remove('hidden');
+}
+
+function handleWatchPartyInputChange() {
+    if (!watchPartyInput) return;
+    const rawValue = watchPartyInput.value;
+
+    if (watchPartyError) {
+        watchPartyError.textContent = '';
+        watchPartyError.classList.add('hidden');
+    }
+
+    if (watchPartyMetadataTimer) {
+        clearTimeout(watchPartyMetadataTimer);
+    }
+
+    const videoId = extractYouTubeVideoId(rawValue);
+    if (!videoId) {
+        pendingWatchPartyVideoId = null;
+        pendingWatchPartyMetadata = null;
+        if (watchPartyPreview) {
+            watchPartyPreview.classList.add('hidden');
+        }
+        return;
+    }
+
+    pendingWatchPartyVideoId = videoId;
+    watchPartyMetadataTimer = setTimeout(async () => {
+        const metadata = await fetchYouTubeMetadata(videoId);
+        if (pendingWatchPartyVideoId !== videoId) return;
+        pendingWatchPartyMetadata = {
+            videoId,
+            title: metadata?.title || 'YouTube Video',
+            thumbnail: metadata?.thumbnail || getDefaultThumbnail(videoId)
+        };
+        updateWatchPartyPreviewUI(videoId, pendingWatchPartyMetadata);
+    }, 350);
+}
+
+async function handleCreateWatchParty(event) {
+    if (event) {
+        event.preventDefault();
+    }
+
+    if (!currentUser || !currentChatId) {
+        if (watchPartyError) {
+            watchPartyError.textContent = 'Select a chat to start a watch party.';
+            watchPartyError.classList.remove('hidden');
+        }
+        return;
+    }
+
+    const rawUrl = watchPartyInput ? watchPartyInput.value.trim() : '';
+    const videoId = extractYouTubeVideoId(rawUrl);
+
+    if (!videoId) {
+        if (watchPartyError) {
+            watchPartyError.textContent = 'Enter a valid YouTube link.';
+            watchPartyError.classList.remove('hidden');
+        }
+        return;
+    }
+
+    try {
+        showLoading('Creating watch party...');
+
+        let metadata = pendingWatchPartyMetadata;
+        if (!metadata || metadata.videoId !== videoId) {
+            metadata = await fetchYouTubeMetadata(videoId) || {
+                title: 'YouTube Video',
+                thumbnail: getDefaultThumbnail(videoId)
+            };
+        }
+
+        const roomId = generateWatchPartyId();
+        const watchDocRef = doc(db, 'watchParties', roomId);
+
+        await setDoc(watchDocRef, {
+            roomId,
+            chatId: currentChatId,
+            hostId: currentUser.uid,
+            hostName: currentUserData?.displayName || currentUser.email || 'Host',
+            hostAvatar: currentUserData?.photoURL || '',
+            videoId,
+            videoTitle: metadata.title,
+            videoThumbnail: metadata.thumbnail || getDefaultThumbnail(videoId),
+            videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            isPlaying: false,
+            currentTime: 0,
+            isActive: true,
+            lastActionBy: currentUser.uid,
+            lastActionName: currentUserData?.displayName || 'Host',
+            participantsCount: 1
+        });
+
+        await setDoc(doc(db, 'watchParties', roomId, 'participants', currentUser.uid), {
+            uid: currentUser.uid,
+            displayName: currentUserData?.displayName || currentUser.email || 'You',
+            photoURL: currentUserData?.photoURL || '',
+            role: 'host',
+            joinedAt: serverTimestamp(),
+            lastSeen: serverTimestamp()
+        });
+
+        const watchPartyMessage = {
+            text: `${currentUserData?.displayName || 'Someone'} started a watch party`,
+            type: 'watch_party',
+            senderId: currentUser.uid,
+            roomId,
+            videoId,
+            videoTitle: metadata.title,
+            videoThumbnail: metadata.thumbnail || getDefaultThumbnail(videoId),
+            hostId: currentUser.uid,
+            hostName: currentUserData?.displayName || 'Host',
+            hostAvatar: currentUserData?.photoURL || '',
+            partyEnded: false,
+            timestamp: serverTimestamp(),
+            seen: false,
+            reactions: [],
+            isDeleted: false
+        };
+
+        const messageRef = await addDoc(collection(db, 'chats', currentChatId, 'messages'), watchPartyMessage);
+
+        await updateDoc(watchDocRef, {
+            messageId: messageRef.id
+        });
+
+        closeWatchPartyModal();
+        hideLoading();
+
+        setTimeout(() => {
+            window.location.href = `watch.html?roomId=${roomId}&mode=host&chatId=${currentChatId}`;
+        }, 400);
+    } catch (error) {
+        console.error('Error creating watch party:', error);
+        hideLoading();
+        if (watchPartyError) {
+            watchPartyError.textContent = 'Failed to create watch party. Please try again.';
+            watchPartyError.classList.remove('hidden');
+        }
+    }
+}
+
+if (createWatchPartyBtn) {
+    createWatchPartyBtn.addEventListener('click', handleCreateWatchParty);
+}
+
+if (watchPartyInput) {
+    watchPartyInput.addEventListener('input', handleWatchPartyInputChange);
+}
+
+if (closeWatchPartyModalBtn) {
+    closeWatchPartyModalBtn.addEventListener('click', closeWatchPartyModal);
+}
+
+if (watchPartyModal) {
+    watchPartyModal.addEventListener('click', (e) => {
+        if (e.target === watchPartyModal) {
+            closeWatchPartyModal();
+        }
+    });
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && watchPartyModal && !watchPartyModal.classList.contains('hidden')) {
+        closeWatchPartyModal();
+    }
+});
+
+// ===========================
 // Media Menu
 // ===========================
 if (mediaMenuBtn) {
@@ -4266,6 +4635,8 @@ if (mediaMenu) {
             openStickerSheet();
         } else if (action === 'games') {
             openGamesLauncher();
+        } else if (action === 'watch') {
+            openWatchPartyModal();
         } else if (action === 'voice') {
             if (window.voiceMessenger) {
                 window.voiceMessenger.startRecordingUI();

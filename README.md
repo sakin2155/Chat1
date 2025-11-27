@@ -18,6 +18,7 @@ A fully functional chat application disguised as an iOS Calculator. Built with v
 - **Message Reactions**: Double-click (desktop) or long-press (mobile) to react with emojis
 - **Edit & Delete**: Manage your own messages
 - **Image Sharing**: Upload images via Cloudinary
+- **Watch Parties**: Share a YouTube link to launch a synced watch room where everyone sees the same playback, seeks, and leave notifications in real time
 - **Responsive Design**: Mobile-first with desktop split-view
 
 ## 🚀 Setup Instructions

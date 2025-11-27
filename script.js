@@ -3881,6 +3881,8 @@ function focusInputAndKeepKeyboard() {
 // ===========================
 // Flag to track if user explicitly closed the keyboard
 let isUserManuallyClosed = false;
+// Flag to prevent blur from marking keyboard as manually closed when clicking UI buttons
+let isBlurFromUIButton = false;
 
 // Prevent keyboard from closing on mobile
 if (isMobileDevice()) {
@@ -3888,6 +3890,12 @@ if (isMobileDevice()) {
         // Keep keyboard open if context menu is open
         if (isContextMenuOpen) {
             // Don't set isUserManuallyClosed here
+            return;
+        }
+
+        // Don't mark as manually closed if blur was caused by clicking a UI button
+        if (isBlurFromUIButton) {
+            isBlurFromUIButton = false;
             return;
         }
 
@@ -4646,6 +4654,11 @@ if (mediaMenuBtn) {
         if (mediaMenu) {
             // On mobile, check if keyboard is currently open before toggling menu
             const keyboardWasOpen = isMobileDevice() && !isUserManuallyClosed;
+            
+            // Set flag to prevent blur from marking keyboard as manually closed
+            if (isMobileDevice()) {
+                isBlurFromUIButton = true;
+            }
             
             mediaMenu.classList.toggle('hidden');
             

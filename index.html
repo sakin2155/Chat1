@@ -397,6 +397,16 @@
                 <label for="profile-status-input">Status message</label>
                 <textarea id="profile-status-input" rows="2"
                     placeholder="Let friends know what you're up to"></textarea>
+                <div class="profile-notification-setting">
+                    <label for="notifications-toggle" class="toggle-label">
+                        <span>Receive Push Notifications</span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="notifications-toggle" class="toggle-input">
+                            <span class="toggle-slider"></span>
+                        </div>
+                    </label>
+                    <p class="toggle-description">Get notified when you receive messages, even when the app is closed</p>
+                </div>
                 <div class="profile-modal-actions">
                     <button id="cancel-profile-btn" class="secondary">Cancel</button>
                     <button id="save-profile-btn">Save changes</button>
@@ -660,6 +670,33 @@
             <button id="image-viewer-close" class="image-viewer-close">×</button>
             <img id="image-viewer-img" src="" alt="Preview" class="image-viewer-img">
             <a id="image-viewer-download" class="image-viewer-download" download>Download</a>
+        </div>
+    </div>
+
+    <!-- Push Notification Permission Modal -->
+    <div id="notification-permission-modal" class="modal hidden notification-permission-modal">
+        <div class="modal-content notification-permission-content">
+            <div class="notification-permission-icon">🔔</div>
+            <h2>Stay Connected</h2>
+            <p>Enable push notifications to receive messages even when the app is closed. Never miss an important conversation!</p>
+            <div class="notification-permission-benefits">
+                <div class="benefit-item">
+                    <span class="benefit-icon">✓</span>
+                    <span>Get instant notifications for new messages</span>
+                </div>
+                <div class="benefit-item">
+                    <span class="benefit-icon">✓</span>
+                    <span>Works even when the app is closed</span>
+                </div>
+                <div class="benefit-item">
+                    <span class="benefit-icon">✓</span>
+                    <span>Tap to open the conversation instantly</span>
+                </div>
+            </div>
+            <div class="notification-permission-actions">
+                <button id="notification-permission-deny" class="secondary">Not Now</button>
+                <button id="notification-permission-allow" class="primary">Enable Notifications</button>
+            </div>
         </div>
     </div>
 

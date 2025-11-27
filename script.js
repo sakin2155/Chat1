@@ -30,6 +30,10 @@ import {
     arrayRemove
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
+// Firebase Messaging imports
+// Note: If these imports don't work, you may need to use the compat version:
+// import { getMessaging, getToken, onMessage, deleteToken } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js';
+import { getMessaging, getToken, onMessage, deleteToken } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js';
 
 // ===========================
 // Firebase Configuration
@@ -49,6 +53,16 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+// Initialize Firebase Messaging (only in browser, not in service worker)
+let messaging = null;
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+        messaging = getMessaging(app);
+    } catch (error) {
+        console.warn('Firebase Messaging initialization failed:', error);
+    }
+}
 
 // Expose Firebase instances to window for other pages (like gallery.html)
 window.auth = auth;
@@ -128,6 +142,8 @@ let streakCheckInterval = null;
 let userNotifications = []; // Store notifications for current user
 let unsubscribeNotifications = null; // Firestore listener for notifications
 let notificationsUnreadCount = 0; // Track unread notification count
+let fcmToken = null; // Store FCM token
+let notificationPermissionChecked = false; // Track if we've checked permission on first visit
 
 // ===========================
 // Auto-scroll Helper
@@ -231,6 +247,10 @@ const confirmClearCancelBtn = document.getElementById('confirm-clear-cancel-btn'
 const successNotification = document.getElementById('success-notification');
 const notificationMessage = document.getElementById('notification-message');
 const storyStrip = document.getElementById('story-strip');
+const notificationsToggle = document.getElementById('notifications-toggle');
+const notificationPermissionModal = document.getElementById('notification-permission-modal');
+const notificationPermissionAllowBtn = document.getElementById('notification-permission-allow');
+const notificationPermissionDenyBtn = document.getElementById('notification-permission-deny');
 const storyListEl = document.getElementById('story-list');
 const addStoryBtn = document.getElementById('add-story-btn');
 const storyFileInput = document.getElementById('story-file-input');
@@ -1270,6 +1290,12 @@ async function openChat(userData) {
     currentChatUser = userData;
     currentChatId = getChatId(currentUser.uid, userData.uid);
 
+    // Check notification permission on first chat visit
+    if (!notificationPermissionChecked) {
+        checkNotificationPermission();
+        notificationPermissionChecked = true;
+    }
+
     // Update UI with nickname if exists
     const nickname = userNicknames.get(userData.uid);
     const displayName = nickname || userData.displayName;
@@ -2238,6 +2264,12 @@ function listenToCurrentUser(uid) {
         if (snapshot.exists()) {
             currentUserData = snapshot.data();
             renderCurrentUserProfile();
+            // Load notification toggle state
+            loadNotificationToggleState();
+            // Load FCM token if available
+            if (currentUserData.fcmToken) {
+                fcmToken = currentUserData.fcmToken;
+            }
         }
     }, (error) => {
         // Suppress permission errors during logout
@@ -2771,6 +2803,8 @@ function openProfileModal() {
     profileStatusInput && (profileStatusInput.value = currentUserData?.statusMessage || '');
     profileAvatarTempUrl = null;
     applyAvatarToElement(profileAvatarCircle, currentUserData?.photoURL, name || currentUserData?.email || currentUser.email);
+    // Load notification toggle state when opening profile modal
+    loadNotificationToggleState();
 }
 
 function closeProfileModal() {
@@ -5528,6 +5562,261 @@ function getTimeAgo(date) {
     if (diffDays < 7) return `${diffDays}d ago`;
 
     return date.toLocaleDateString();
+}
+
+// ===========================
+// FCM Push Notification System
+// ===========================
+
+/**
+ * Check notification permission status and show custom modal if needed
+ * This is called once on first visit to the chat interface
+ */
+async function checkNotificationPermission() {
+    if (!currentUser || !('Notification' in window) || !('serviceWorker' in navigator)) {
+        return;
+    }
+
+    // Check if permission was already granted
+    if (Notification.permission === 'granted') {
+        // Permission already granted, get token
+        await getFCMToken();
+        return;
+    }
+
+    // Check if user has already denied or we've shown the modal before
+    const hasShownModal = localStorage.getItem(`notification_modal_shown_${currentUser.uid}`);
+    if (Notification.permission === 'denied' || hasShownModal) {
+        return;
+    }
+
+    // Show custom modal
+    if (notificationPermissionModal) {
+        notificationPermissionModal.classList.remove('hidden');
+    }
+}
+
+/**
+ * Request native notification permission
+ */
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.warn('This browser does not support notifications');
+        return false;
+    }
+
+    try {
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+            // Get FCM token after permission is granted
+            await getFCMToken();
+            // Mark modal as shown
+            localStorage.setItem(`notification_modal_shown_${currentUser.uid}`, 'true');
+            return true;
+        } else {
+            console.log('Notification permission denied');
+            // Mark modal as shown even if denied
+            localStorage.setItem(`notification_modal_shown_${currentUser.uid}`, 'true');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error requesting notification permission:', error);
+        return false;
+    }
+}
+
+/**
+ * Get FCM token and save to database
+ */
+async function getFCMToken() {
+    if (!messaging || !currentUser) {
+        console.warn('Messaging not initialized or user not logged in');
+        return null;
+    }
+
+    try {
+        // Register service worker first
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        console.log('Service Worker registered:', registration);
+
+        // Get FCM token
+        // VAPID key from Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
+        const vapidKey = 'BL_EozGV1n9u80_nt-0AULPb-rgobY_Y2scWhfBk-h6XaS1eTeYSBrOQNsLrR99IkRQp1zHSdvJl3_AsT6SqNC8';
+        
+        const token = await getToken(messaging, {
+            vapidKey: vapidKey,
+            serviceWorkerRegistration: registration
+        });
+
+        if (token) {
+            console.log('FCM Token:', token);
+            fcmToken = token;
+            await saveFCMTokenToDatabase(token);
+            return token;
+        } else {
+            console.log('No FCM token available');
+            return null;
+        }
+    } catch (error) {
+        console.error('Error getting FCM token:', error);
+        // If service worker registration fails, try without it
+        try {
+            const token = await getToken(messaging);
+            if (token) {
+                fcmToken = token;
+                await saveFCMTokenToDatabase(token);
+                return token;
+            }
+        } catch (fallbackError) {
+            console.error('Error getting FCM token (fallback):', fallbackError);
+        }
+        return null;
+    }
+}
+
+/**
+ * Save FCM token to Firestore
+ */
+async function saveFCMTokenToDatabase(token) {
+    if (!currentUser) return;
+
+    try {
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+            fcmToken: token,
+            notifications_enabled: true,
+            fcmTokenUpdatedAt: serverTimestamp()
+        });
+        console.log('FCM token saved to database');
+    } catch (error) {
+        console.error('Error saving FCM token:', error);
+    }
+}
+
+/**
+ * Unsubscribe from FCM and update database
+ */
+async function unsubscribeFromFCM() {
+    if (!messaging || !fcmToken) {
+        console.log('No FCM token to unsubscribe');
+        return;
+    }
+
+    try {
+        await deleteToken(messaging);
+        fcmToken = null;
+        
+        // Update database
+        if (currentUser) {
+            await updateDoc(doc(db, 'users', currentUser.uid), {
+                notifications_enabled: false,
+                fcmToken: null
+            });
+        }
+        console.log('Unsubscribed from FCM');
+    } catch (error) {
+        console.error('Error unsubscribing from FCM:', error);
+    }
+}
+
+/**
+ * Subscribe to FCM (when toggle is turned on)
+ */
+async function subscribeToFCM() {
+    if (!currentUser) return;
+
+    // Request permission if not granted
+    if (Notification.permission !== 'granted') {
+        const granted = await requestNotificationPermission();
+        if (!granted) {
+            // Permission denied, turn toggle off
+            if (notificationsToggle) {
+                notificationsToggle.checked = false;
+            }
+            return;
+        }
+    } else {
+        // Permission already granted, get token
+        await getFCMToken();
+    }
+}
+
+/**
+ * Load notification toggle state from user data
+ */
+function loadNotificationToggleState() {
+    if (!notificationsToggle || !currentUserData) return;
+
+    const notificationsEnabled = currentUserData.notifications_enabled === true;
+    notificationsToggle.checked = notificationsEnabled;
+
+    // If enabled but no token, try to get one
+    if (notificationsEnabled && !fcmToken && Notification.permission === 'granted') {
+        getFCMToken();
+    }
+}
+
+/**
+ * Handle notification toggle change
+ */
+async function handleNotificationToggleChange() {
+    if (!notificationsToggle || !currentUser) return;
+
+    const isEnabled = notificationsToggle.checked;
+
+    try {
+        if (isEnabled) {
+            // Turn on notifications
+            await subscribeToFCM();
+        } else {
+            // Turn off notifications
+            await unsubscribeFromFCM();
+        }
+    } catch (error) {
+        console.error('Error toggling notifications:', error);
+        // Revert toggle on error
+        notificationsToggle.checked = !isEnabled;
+        alert('Failed to update notification settings. Please try again.');
+    }
+}
+
+// Setup notification permission modal event listeners
+if (notificationPermissionAllowBtn) {
+    notificationPermissionAllowBtn.addEventListener('click', async () => {
+        if (notificationPermissionModal) {
+            notificationPermissionModal.classList.add('hidden');
+        }
+        await requestNotificationPermission();
+    });
+}
+
+if (notificationPermissionDenyBtn) {
+    notificationPermissionDenyBtn.addEventListener('click', () => {
+        if (notificationPermissionModal) {
+            notificationPermissionModal.classList.add('hidden');
+        }
+        // Mark modal as shown
+        if (currentUser) {
+            localStorage.setItem(`notification_modal_shown_${currentUser.uid}`, 'true');
+        }
+    });
+}
+
+// Setup notification toggle event listener
+if (notificationsToggle) {
+    notificationsToggle.addEventListener('change', handleNotificationToggleChange);
+}
+
+// Listen for foreground messages (when app is open)
+if (messaging) {
+    onMessage(messaging, (payload) => {
+        console.log('Message received in foreground:', payload);
+        // Show in-app notification or update UI
+        // You can customize this based on your needs
+        if (payload.notification) {
+            showNotification(payload.notification.body || 'New message received');
+        }
+    });
 }
 
 // ===========================

@@ -3860,14 +3860,6 @@ function isMobileDevice() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
-function restoreMessageInputFocus() {
-    if (messageInput && isMobileDevice()) {
-        setTimeout(() => {
-            messageInput.focus();
-        }, 100);
-    }
-}
-
 function focusInputAndKeepKeyboard() {
     if (isMobileDevice()) {
         // Only restore focus if the user hasn't explicitly closed the keyboard
@@ -4653,9 +4645,14 @@ if (mediaMenuBtn) {
         e.stopPropagation();
         if (mediaMenu) {
             mediaMenu.classList.toggle('hidden');
+            // On mobile, if keyboard was open, keep it open
+            if (isMobileDevice() && !mediaMenu.classList.contains('hidden')) {
+                // Media menu is now visible, refocus input to keep keyboard open
+                setTimeout(() => {
+                    messageInput.focus();
+                }, 50);
+            }
         }
-        // Restore focus to keep keyboard open on mobile
-        restoreMessageInputFocus();
     });
 }
 
@@ -4691,9 +4688,6 @@ if (mediaMenu) {
                 window.voiceMessenger.startRecordingUI();
             }
         }
-
-        // Restore focus to keep keyboard open on mobile
-        restoreMessageInputFocus();
     });
 }
 
@@ -4760,6 +4754,12 @@ imageInput.addEventListener('change', async (e) => {
             tempMessageDiv.remove();
             // Send actual message
             await sendMediaMessage(secureUrl, 'image');
+            // On mobile, if keyboard was open, keep it open after sending image
+            if (isMobileDevice() && !isUserManuallyClosed) {
+                setTimeout(() => {
+                    messageInput.focus();
+                }, 50);
+            }
         }
         imageInput.value = '';
     } catch (error) {
@@ -5011,6 +5011,12 @@ async function handleGifSelect(url) {
     try {
         await sendMediaMessage(url, 'gif');
         closeGifModal();
+        // On mobile, if keyboard was open, keep it open after sending GIF
+        if (isMobileDevice() && !isUserManuallyClosed) {
+            setTimeout(() => {
+                messageInput.focus();
+            }, 50);
+        }
     } catch (error) {
         console.error('Error sending GIF:', error);
         alert('Could not send this GIF. Please try a different one.');
@@ -5032,8 +5038,12 @@ async function openStickerSheet() {
     stickerSheet.classList.remove('hidden');
     stickerSheet.classList.remove('closing');
 
-    // Restore focus to keep keyboard open on mobile
-    restoreMessageInputFocus();
+    // On mobile, if keyboard was open, keep it open by refocusing the input
+    if (isMobileDevice() && !isUserManuallyClosed) {
+        setTimeout(() => {
+            messageInput.focus();
+        }, 50);
+    }
 }
 
 function closeStickerSheet() {
@@ -5046,9 +5056,6 @@ function closeStickerSheet() {
     setTimeout(() => {
         stickerSheet.classList.add('hidden');
         stickerSheet.classList.remove('closing');
-
-        // Restore focus to keep keyboard open on mobile
-        restoreMessageInputFocus();
     }, 250); // Match animation duration
 }
 
@@ -5102,11 +5109,12 @@ async function handleStickerSelect(url) {
     try {
         await sendMediaMessage(url, 'sticker');
         closeStickerSheet();
-
-        // Restore focus to keep keyboard open on mobile after sending
-        setTimeout(() => {
-            restoreMessageInputFocus();
-        }, 300); // Wait for close animation
+        // On mobile, if keyboard was open, keep it open after sending sticker
+        if (isMobileDevice() && !isUserManuallyClosed) {
+            setTimeout(() => {
+                messageInput.focus();
+            }, 50);
+        }
     } catch (error) {
         console.error('Error sending sticker:', error);
         alert('Could not send this sticker. Please try again.');
@@ -5129,6 +5137,12 @@ async function handleStickerUpload(event) {
             renderCustomStickers();
             await sendMediaMessage(secureUrl, 'sticker');
             closeStickerSheet();
+            // On mobile, if keyboard was open, keep it open after sending custom sticker
+            if (isMobileDevice() && !isUserManuallyClosed) {
+                setTimeout(() => {
+                    messageInput.focus();
+                }, 50);
+            }
         }
     } catch (error) {
         console.error('Error creating sticker:', error);

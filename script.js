@@ -4644,9 +4644,13 @@ if (mediaMenuBtn) {
     mediaMenuBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (mediaMenu) {
+            // On mobile, check if keyboard is currently open before toggling menu
+            const keyboardWasOpen = isMobileDevice() && !isUserManuallyClosed;
+            
             mediaMenu.classList.toggle('hidden');
+            
             // On mobile, if keyboard was open, keep it open
-            if (isMobileDevice() && !mediaMenu.classList.contains('hidden')) {
+            if (isMobileDevice() && keyboardWasOpen && !mediaMenu.classList.contains('hidden')) {
                 // Media menu is now visible, refocus input to keep keyboard open
                 setTimeout(() => {
                     messageInput.focus();

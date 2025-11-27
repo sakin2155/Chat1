@@ -3881,8 +3881,6 @@ function focusInputAndKeepKeyboard() {
 // ===========================
 // Flag to track if user explicitly closed the keyboard
 let isUserManuallyClosed = false;
-// Flag to prevent blur from marking keyboard as manually closed when clicking UI buttons
-let isBlurFromUIButton = false;
 
 // Prevent keyboard from closing on mobile
 if (isMobileDevice()) {
@@ -3890,12 +3888,6 @@ if (isMobileDevice()) {
         // Keep keyboard open if context menu is open
         if (isContextMenuOpen) {
             // Don't set isUserManuallyClosed here
-            return;
-        }
-
-        // Don't mark as manually closed if blur was caused by clicking a UI button
-        if (isBlurFromUIButton) {
-            isBlurFromUIButton = false;
             return;
         }
 
@@ -4652,23 +4644,7 @@ if (mediaMenuBtn) {
     mediaMenuBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         if (mediaMenu) {
-            // On mobile, check if keyboard is currently open before toggling menu
-            const keyboardWasOpen = isMobileDevice() && !isUserManuallyClosed;
-            
-            // Set flag to prevent blur from marking keyboard as manually closed
-            if (isMobileDevice()) {
-                isBlurFromUIButton = true;
-            }
-            
             mediaMenu.classList.toggle('hidden');
-            
-            // On mobile, if keyboard was open, keep it open
-            if (isMobileDevice() && keyboardWasOpen && !mediaMenu.classList.contains('hidden')) {
-                // Media menu is now visible, refocus input to keep keyboard open
-                setTimeout(() => {
-                    messageInput.focus();
-                }, 50);
-            }
         }
     });
 }
@@ -4771,12 +4747,6 @@ imageInput.addEventListener('change', async (e) => {
             tempMessageDiv.remove();
             // Send actual message
             await sendMediaMessage(secureUrl, 'image');
-            // On mobile, if keyboard was open, keep it open after sending image
-            if (isMobileDevice() && !isUserManuallyClosed) {
-                setTimeout(() => {
-                    messageInput.focus();
-                }, 50);
-            }
         }
         imageInput.value = '';
     } catch (error) {
@@ -5028,12 +4998,6 @@ async function handleGifSelect(url) {
     try {
         await sendMediaMessage(url, 'gif');
         closeGifModal();
-        // On mobile, if keyboard was open, keep it open after sending GIF
-        if (isMobileDevice() && !isUserManuallyClosed) {
-            setTimeout(() => {
-                messageInput.focus();
-            }, 50);
-        }
     } catch (error) {
         console.error('Error sending GIF:', error);
         alert('Could not send this GIF. Please try a different one.');
@@ -5054,13 +5018,6 @@ async function openStickerSheet() {
     // Remove hidden class to trigger fade-in animation
     stickerSheet.classList.remove('hidden');
     stickerSheet.classList.remove('closing');
-
-    // On mobile, if keyboard was open, keep it open by refocusing the input
-    if (isMobileDevice() && !isUserManuallyClosed) {
-        setTimeout(() => {
-            messageInput.focus();
-        }, 50);
-    }
 }
 
 function closeStickerSheet() {
@@ -5126,12 +5083,6 @@ async function handleStickerSelect(url) {
     try {
         await sendMediaMessage(url, 'sticker');
         closeStickerSheet();
-        // On mobile, if keyboard was open, keep it open after sending sticker
-        if (isMobileDevice() && !isUserManuallyClosed) {
-            setTimeout(() => {
-                messageInput.focus();
-            }, 50);
-        }
     } catch (error) {
         console.error('Error sending sticker:', error);
         alert('Could not send this sticker. Please try again.');
@@ -5154,12 +5105,6 @@ async function handleStickerUpload(event) {
             renderCustomStickers();
             await sendMediaMessage(secureUrl, 'sticker');
             closeStickerSheet();
-            // On mobile, if keyboard was open, keep it open after sending custom sticker
-            if (isMobileDevice() && !isUserManuallyClosed) {
-                setTimeout(() => {
-                    messageInput.focus();
-                }, 50);
-            }
         }
     } catch (error) {
         console.error('Error creating sticker:', error);

@@ -12,7 +12,11 @@ import {
     deleteDoc,
     collection,
     onSnapshot,
-    serverTimestamp
+    serverTimestamp,
+    addDoc,
+    query,
+    orderBy,
+    limit
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // ===========================
@@ -43,6 +47,7 @@ let watchDocRef = null;
 let participantDocRef = null;
 let participantsUnsub = null;
 let playbackUnsub = null;
+let liveChatUnsub = null;
 let heartbeatInterval = null;
 let sessionCleanedUp = false;
 let sessionActive = true;
@@ -83,6 +88,11 @@ const loginModal = document.getElementById('login-modal');
 const goToLoginBtn = document.getElementById('go-to-login-btn');
 const headerTitle = document.getElementById('watch-video-title');
 const hostLine = document.getElementById('watch-host-line');
+const chatMessagesEl = document.getElementById('watch-chat-messages');
+const chatEmptyState = document.getElementById('watch-chat-empty');
+const chatForm = document.getElementById('watch-chat-form');
+const chatInput = document.getElementById('watch-chat-input');
+const chatSendBtn = document.getElementById('watch-chat-send-btn');
 
 // ===========================
 // UI Helpers
@@ -121,6 +131,15 @@ function showSessionEnded(message) {
 function formatTime(date) {
     if (!(date instanceof Date)) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function escapeHtml(unsafe = '') {
+    return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 function getInitials(name = '') {
@@ -184,6 +203,65 @@ function addActivityEntry(message) {
     const entries = activityLogEl.querySelectorAll('.activity-entry');
     if (entries.length > 25) {
         entries[entries.length - 1].remove();
+    }
+}
+
+function isChatNearBottom() {
+    if (!chatMessagesEl) return true;
+    const distanceFromBottom = chatMessagesEl.scrollHeight - (chatMessagesEl.scrollTop + chatMessagesEl.clientHeight);
+    return distanceFromBottom <= 60;
+}
+
+function scrollChatToBottom() {
+    if (!chatMessagesEl) return;
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function createChatMessageElement(message) {
+    const isOwn = message.senderId === currentUser?.uid;
+    const wrapper = document.createElement('div');
+    wrapper.className = `chat-message${isOwn ? ' own' : ''}`;
+
+    const header = document.createElement('div');
+    header.className = 'chat-message-header';
+
+    const sender = document.createElement('span');
+    sender.className = 'chat-sender';
+    sender.textContent = isOwn ? 'You' : (message.senderName || 'Participant');
+
+    const time = document.createElement('span');
+    const timestampDate = message.timestamp?.toDate ? message.timestamp.toDate() : (message.timestamp instanceof Date ? message.timestamp : new Date());
+    time.textContent = formatTime(timestampDate);
+
+    header.appendChild(sender);
+    header.appendChild(time);
+
+    const body = document.createElement('div');
+    body.className = 'chat-message-body';
+    const safeText = escapeHtml(message.text || '');
+    body.innerHTML = safeText.replace(/\n/g, '<br>');
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(body);
+    return wrapper;
+}
+
+function renderChatMessages(messages) {
+    if (!chatMessagesEl) return;
+    const shouldStick = isChatNearBottom();
+    chatMessagesEl.innerHTML = '';
+    messages.forEach((message) => {
+        chatMessagesEl.appendChild(createChatMessageElement(message));
+    });
+
+    if (messages.length === 0) {
+        chatEmptyState?.classList.remove('hidden');
+    } else {
+        chatEmptyState?.classList.add('hidden');
+    }
+
+    if (shouldStick) {
+        scrollChatToBottom();
     }
 }
 
@@ -357,6 +435,45 @@ function startParticipantsListener() {
     });
 }
 
+function startLiveChatListener() {
+    if (!roomId || !chatMessagesEl) return;
+    const liveChatRef = collection(db, 'watchParties', roomId, 'liveChat');
+    const messagesQuery = query(liveChatRef, orderBy('timestamp', 'asc'), limit(200));
+    liveChatUnsub = onSnapshot(messagesQuery, (snapshot) => {
+        const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderChatMessages(messages);
+    });
+}
+
+async function sendChatMessage() {
+    if (!chatInput || !chatInput.value.trim() || !roomId || !currentUser) return;
+    const messageText = chatInput.value.trim();
+    chatSendBtn?.setAttribute('disabled', 'true');
+    try {
+        await addDoc(collection(db, 'watchParties', roomId, 'liveChat'), {
+            text: messageText,
+            senderId: currentUser.uid,
+            senderName: currentUserData?.displayName || currentUser.email || 'Participant',
+            timestamp: serverTimestamp()
+        });
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        scrollChatToBottom();
+    } catch (error) {
+        console.error('Failed to send chat message:', error);
+        showToast('Message failed to send');
+    } finally {
+        chatSendBtn?.removeAttribute('disabled');
+    }
+}
+
+function autoResizeChatInput() {
+    if (!chatInput) return;
+    chatInput.style.height = 'auto';
+    const height = Math.min(chatInput.scrollHeight, 120);
+    chatInput.style.height = `${height}px`;
+}
+
 // ===========================
 // Session Management
 // ===========================
@@ -394,6 +511,7 @@ async function cleanupParticipant() {
 
     if (participantsUnsub) participantsUnsub();
     if (playbackUnsub) playbackUnsub();
+    if (liveChatUnsub) liveChatUnsub();
 
     if (participantDocRef) {
         try {
@@ -471,6 +589,20 @@ goToLoginBtn?.addEventListener('click', () => {
     window.location.href = 'index.html';
 });
 
+chatForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    sendChatMessage();
+});
+
+chatInput?.addEventListener('input', autoResizeChatInput);
+
+chatInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendChatMessage();
+    }
+});
+
 window.addEventListener('beforeunload', () => {
     cleanupParticipant();
 });
@@ -511,6 +643,7 @@ async function initializeWatchParty() {
     await registerParticipant();
     startPlaybackListener();
     startParticipantsListener();
+    startLiveChatListener();
 
     hideLoading();
     watchContainer?.classList.remove('hidden');
@@ -527,5 +660,6 @@ onAuthStateChanged(auth, async (user) => {
     await loadCurrentUserProfile(user.uid);
     initializeWatchParty();
 });
+
 
 

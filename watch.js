@@ -16,7 +16,8 @@ import {
     addDoc,
     query,
     orderBy,
-    limit
+    limit,
+    getDocs
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 // ===========================
@@ -59,6 +60,7 @@ let currentPartyData = null;
 let watchMessageId = null;
 let lastPlaybackEventId = null;
 let toastTimer = null;
+let leaveModalVisible = false;
 
 const params = new URLSearchParams(window.location.search);
 roomId = params.get('roomId');
@@ -93,6 +95,11 @@ const chatEmptyState = document.getElementById('watch-chat-empty');
 const chatForm = document.getElementById('watch-chat-form');
 const chatInput = document.getElementById('watch-chat-input');
 const chatSendBtn = document.getElementById('watch-chat-send-btn');
+const leaveModal = document.getElementById('participant-leave-modal');
+const leaveModalMessage = document.getElementById('participant-leave-message');
+const leaveModalList = document.getElementById('participant-leave-list');
+const leaveSessionBtn = document.getElementById('leave-session-btn');
+const leaveModalTitle = document.getElementById('participant-leave-title');
 
 // ===========================
 // UI Helpers
@@ -125,6 +132,7 @@ function showSessionEnded(message) {
     if (sessionEndedMessage) {
         sessionEndedMessage.textContent = message;
     }
+    hideParticipantLeaveModal();
     sessionEndedEl?.classList.remove('hidden');
 }
 
@@ -262,6 +270,66 @@ function renderChatMessages(messages) {
 
     if (shouldStick) {
         scrollChatToBottom();
+    }
+}
+
+function renderLeaveParticipantsList(participants) {
+    if (!leaveModalList) return;
+    leaveModalList.innerHTML = '';
+
+    if (!participants.length) {
+        const empty = document.createElement('div');
+        empty.className = 'leave-participant-row';
+        empty.textContent = 'No one else is connected.';
+        leaveModalList.appendChild(empty);
+        return;
+    }
+
+    participants.forEach((participant) => {
+        const row = document.createElement('div');
+        row.className = 'leave-participant-row';
+
+        const name = document.createElement('div');
+        name.className = 'leave-participant-name';
+        name.textContent = participant.displayName || participant.email || 'Guest';
+
+        const role = document.createElement('div');
+        role.className = 'leave-participant-role';
+        role.textContent = participant.role === 'host' ? 'Host' : 'Viewer';
+
+        row.appendChild(name);
+        row.appendChild(role);
+        leaveModalList.appendChild(row);
+    });
+}
+
+function showParticipantLeaveModal(triggerName, participants) {
+    if (!leaveModal) return;
+    if (leaveModalTitle) {
+        leaveModalTitle.textContent = `${triggerName || 'A participant'} left the session`;
+    }
+    if (leaveModalMessage) {
+        leaveModalMessage.textContent = 'You can leave as well or wait for the host to return.';
+    }
+    renderLeaveParticipantsList(participants);
+    leaveModal.classList.remove('hidden');
+    leaveModalVisible = true;
+}
+
+function hideParticipantLeaveModal() {
+    if (!leaveModal) return;
+    leaveModal.classList.add('hidden');
+    leaveModalVisible = false;
+}
+
+async function markWatchMessageEnded() {
+    if (!watchMessageId || !chatId) return;
+    try {
+        await updateDoc(doc(db, 'chats', chatId, 'messages', watchMessageId), {
+            partyEnded: true
+        });
+    } catch (error) {
+        console.warn('Unable to update watch party message:', error);
     }
 }
 
@@ -420,6 +488,16 @@ function startParticipantsListener() {
     participantsUnsub = onSnapshot(participantsRef, (snapshot) => {
         const participants = snapshot.docs.map(doc => doc.data());
         renderParticipants(participants);
+        if (leaveModalVisible) {
+            renderLeaveParticipantsList(participants);
+        }
+
+        const hostPresent = participants.some((participant) => participant.role === 'host');
+        if (!hostPresent && participants.length > 0 && !leaveModalVisible) {
+            showParticipantLeaveModal('The host', participants);
+        } else if (hostPresent && leaveModalVisible) {
+            hideParticipantLeaveModal();
+        }
 
         snapshot.docChanges().forEach((change) => {
             const data = change.doc.data();
@@ -430,6 +508,7 @@ function startParticipantsListener() {
             if (change.type === 'removed' && data.uid !== currentUser?.uid) {
                 showToast(`${data.displayName || 'A friend'} left the watch party`);
                 addActivityEntry(`${data.displayName || 'A friend'} left`);
+                showParticipantLeaveModal(data.displayName || 'A participant', participants);
             }
         });
     });
@@ -447,8 +526,12 @@ function startLiveChatListener() {
 
 async function sendChatMessage() {
     if (!chatInput || !chatInput.value.trim() || !roomId || !currentUser) return;
-    const messageText = chatInput.value.trim();
+    const rawValue = chatInput.value;
+    const messageText = rawValue.trim();
     chatSendBtn?.setAttribute('disabled', 'true');
+    chatInput.value = '';
+    autoResizeChatInput();
+    scrollChatToBottom();
     try {
         await addDoc(collection(db, 'watchParties', roomId, 'liveChat'), {
             text: messageText,
@@ -456,10 +539,9 @@ async function sendChatMessage() {
             senderName: currentUserData?.displayName || currentUser.email || 'Participant',
             timestamp: serverTimestamp()
         });
-        chatInput.value = '';
-        chatInput.style.height = 'auto';
-        scrollChatToBottom();
     } catch (error) {
+        chatInput.value = rawValue;
+        autoResizeChatInput();
         console.error('Failed to send chat message:', error);
         showToast('Message failed to send');
     } finally {
@@ -516,9 +598,27 @@ async function cleanupParticipant() {
     if (participantDocRef) {
         try {
             await deleteDoc(participantDocRef);
+            await expireSessionIfEmpty();
         } catch (error) {
             console.warn('Unable to remove participant record:', error);
         }
+    }
+}
+
+async function expireSessionIfEmpty() {
+    if (!roomId) return;
+    try {
+        const participantsSnapshot = await getDocs(collection(db, 'watchParties', roomId, 'participants'));
+        if (participantsSnapshot.empty && watchDocRef) {
+            await updateDoc(watchDocRef, {
+                isActive: false,
+                endedAt: serverTimestamp(),
+                endedBy: currentUser?.uid || 'system'
+            });
+            await markWatchMessageEnded();
+        }
+    } catch (error) {
+        console.warn('Unable to expire empty session:', error);
     }
 }
 
@@ -530,11 +630,7 @@ async function endWatchParty() {
             endedBy: currentUser.uid,
             endedAt: serverTimestamp()
         });
-        if (watchMessageId && chatId) {
-            await updateDoc(doc(db, 'chats', chatId, 'messages', watchMessageId), {
-                partyEnded: true
-            });
-        }
+        await markWatchMessageEnded();
         showSessionEnded('You ended this watch party.');
         await cleanupParticipant();
     } catch (error) {
@@ -542,11 +638,23 @@ async function endWatchParty() {
     }
 }
 
+async function handleLeaveParty() {
+    try {
+        if (currentPartyData?.hostId === currentUser?.uid) {
+            await endWatchParty();
+        } else {
+            await cleanupParticipant();
+        }
+    } finally {
+        window.location.href = 'index.html';
+    }
+}
+
 // ===========================
 // Event Listeners
 // ===========================
 backToChatBtn?.addEventListener('click', () => {
-    window.location.href = 'index.html';
+    handleLeaveParty();
 });
 
 copyInviteBtn?.addEventListener('click', async () => {
@@ -582,11 +690,15 @@ syncNowBtn?.addEventListener('click', () => {
 });
 
 sessionBackBtn?.addEventListener('click', () => {
-    window.location.href = 'index.html';
+    handleLeaveParty();
 });
 
 goToLoginBtn?.addEventListener('click', () => {
     window.location.href = 'index.html';
+});
+
+leaveSessionBtn?.addEventListener('click', () => {
+    handleLeaveParty();
 });
 
 chatForm?.addEventListener('submit', (event) => {

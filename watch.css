@@ -291,10 +291,12 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
     padding: 10px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .chat-input textarea {
-    flex: 1;
+    flex: 1 1 auto;
     resize: none;
     border: none;
     background: transparent;
@@ -303,6 +305,7 @@ body {
     max-height: 120px;
     line-height: 1.4;
     font-family: inherit;
+    min-height: 42px;
 }
 
 .chat-input textarea:focus {
@@ -311,7 +314,7 @@ body {
 
 .chat-send-btn {
     flex-shrink: 0;
-    min-width: 80px;
+    min-width: 96px;
 }
 
 .participants-list {
@@ -409,6 +412,74 @@ body {
     max-width: 360px;
 }
 
+.leave-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 5, 10, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2150;
+}
+
+.leave-modal-card {
+    width: min(420px, calc(100% - 32px));
+    background: rgba(7, 7, 12, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 28px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.leave-modal-header h2 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.leave-modal-header p {
+    margin: 8px 0 0;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.leave-modal-body h4 {
+    margin: 0 0 12px;
+    color: rgba(255, 255, 255, 0.75);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.leave-participants-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.leave-participant-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.leave-participant-name {
+    font-weight: 600;
+}
+
+.leave-participant-role {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.full-width {
+    width: 100%;
+}
+
 @media (max-width: 1024px) {
     body {
         padding: 16px;
@@ -432,6 +503,15 @@ body {
     .chat-messages {
         max-height: 260px;
     }
+
+    .watch-sidebar {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .sidebar-card {
+        flex: 1 1 320px;
+    }
 }
 
 @media (max-width: 768px) {
@@ -451,12 +531,26 @@ body {
         flex-direction: column;
     }
 
-    .chat-input {
+    .watch-sidebar {
         flex-direction: column;
     }
 
-    .chat-send-btn {
+    .video-section,
+    .sidebar-card {
+        border-radius: 18px;
+    }
+
+    .chat-input textarea {
+        flex: 1 1 100%;
         width: 100%;
+    }
+
+    .chat-send-btn {
+        flex: 0 0 auto;
+        width: auto;
+        margin-top: 6px;
+        margin-left: auto;
+        align-self: flex-end;
     }
 }
 
@@ -480,7 +574,16 @@ body {
     .sidebar-card {
         padding: 16px;
     }
+
+    .watch-controls {
+        gap: 8px;
+    }
+
+    .watch-header-actions {
+        gap: 8px;
+    }
 }
+
 
 
 

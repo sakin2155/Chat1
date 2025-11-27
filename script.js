@@ -1499,22 +1499,61 @@ function createMessageElement(messageData) {
             : (isOwnMessage ? 'Open Watch Party' : 'Join Watch Party');
         const buttonClasses = `watch-party-btn${partyEnded ? ' expired' : ''}`;
         const buttonAttributes = partyEnded ? 'disabled' : `data-room-id="${roomId || ''}"`;
+        const videoIconSvg = `
+            <svg class="watch-party-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6.5C4 5.1 5.1 4 6.5 4h7c1.4 0 2.5 1.1 2.5 2.5v11c0 1.4-1.1 2.5-2.5 2.5h-7C5.1 20 4 18.9 4 17.5v-11Z" />
+                <path d="M18 8l4-2.5v11L18 14" />
+            </svg>
+        `;
+        const hostIconSvg = `
+            <svg class="watch-party-icon subtle" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12Zm0 2c-3 0-9 1.5-9 4.5V21h18v-2.5c0-3-6-4.5-9-4.5Z" />
+            </svg>
+        `;
+        const statusIconSvg = partyEnded
+            ? `
+                <svg class="watch-party-icon danger" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 8v4" />
+                    <path d="M12 16h.01" />
+                    <path d="M10.3 3.5 1.8 18a1.5 1.5 0 0 0 1.3 2.25h17.8A1.5 1.5 0 0 0 22.2 18L13.7 3.5a1.5 1.5 0 0 0-2.6 0Z" />
+                </svg>
+            `
+            : `
+                <svg class="watch-party-icon success" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 12.5 9 17l11-11" />
+                </svg>
+            `;
+        const arrowIconSvg = `
+            <svg class="watch-party-icon arrow" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m13 6 6 6-6 6" />
+            </svg>
+        `;
 
         content = `
             <div class="watch-party-card">
-                <div class="watch-party-header">
+                <div class="watch-party-chip">
+                    <span class="watch-party-icon-cell">${videoIconSvg}</span>
                     <span>Watch Party</span>
-                    <span>🎬 YouTube</span>
                 </div>
                 <div class="watch-party-body">
                     <div class="watch-party-thumb-small" style="${thumbnailUrl ? `background-image: url('${thumbnailUrl}');` : ''}"></div>
                     <div class="watch-party-info">
                         <div class="watch-party-title">${escapeHtml(videoTitle)}</div>
-                        <div class="watch-party-host">Host • ${escapeHtml(hostName)}</div>
+                        <div class="watch-party-host">
+                            ${hostIconSvg}
+                            <span>Host • ${escapeHtml(hostName)}</span>
+                        </div>
+                        <div class="watch-party-status-row">
+                            ${statusIconSvg}
+                            <span>${statusText}</span>
+                        </div>
                     </div>
                 </div>
-                <div class="watch-party-status">${statusText}</div>
-                <button class="${buttonClasses}" ${buttonAttributes}>${buttonLabel}</button>
+                <button class="${buttonClasses}" ${buttonAttributes}>
+                    <span>${buttonLabel}</span>
+                    ${arrowIconSvg}
+                </button>
             </div>
         `;
     } else if (messageData.type === 'voice') {
@@ -3045,16 +3084,16 @@ function openChatSettingsModal() {
     sentBubbleColorInput.value = theme.sentBubbleColor;
     receivedBubbleColorInput.value = theme.receivedBubbleColor;
     bgColorInput.value = theme.bgColor;
-    
+
     // Update color value displays
     updateColorValueDisplays();
-    
+
     // Update theme preview
     updateThemePreview();
-    
+
     // Update preset button states
     updatePresetButtonStates('default');
-    
+
     // Show/hide remove bg image button
     if (theme.bgImage) {
         removeBgImageBtn.classList.remove('hidden');
@@ -3236,18 +3275,18 @@ function getDefaultTheme() {
 
 function applyThemePreset(presetName) {
     if (!THEME_PRESETS[presetName]) return;
-    
+
     const preset = THEME_PRESETS[presetName];
     sentBubbleColorInput.value = preset.sentBubbleColor;
     receivedBubbleColorInput.value = preset.receivedBubbleColor;
     bgColorInput.value = preset.bgColor;
-    
+
     // Update color value displays
     updateColorValueDisplays();
-    
+
     // Update live preview
     updateThemePreview();
-    
+
     // Update preset button active state
     updatePresetButtonStates(presetName);
 }
@@ -3262,16 +3301,16 @@ function updateThemePreview() {
     const sentColor = sentBubbleColorInput.value;
     const receivedColor = receivedBubbleColorInput.value;
     const bgColor = bgColorInput.value;
-    
+
     // Update preview bubbles
     const previewContainer = document.querySelector('.message-preview-container');
     if (previewContainer) {
         const sentBubble = previewContainer.querySelector('.preview-message.sent .preview-bubble');
         const receivedBubble = previewContainer.querySelector('.preview-message.received .preview-bubble');
-        
+
         if (sentBubble) sentBubble.style.backgroundColor = sentColor;
         if (receivedBubble) receivedBubble.style.backgroundColor = receivedColor;
-        
+
         previewContainer.style.backgroundColor = bgColor;
     }
 }
@@ -3297,7 +3336,7 @@ function handleBgImageChange(event) {
             const theme = chatThemes.get(currentChatId) || getDefaultTheme();
             theme.bgImage = imageData;
             chatThemes.set(currentChatId, theme);
-            
+
             // Show remove button
             removeBgImageBtn.classList.remove('hidden');
         }
@@ -3465,31 +3504,31 @@ function applyThemeToChat(theme) {
 // ===========================
 async function openAdminBgSelector() {
     if (!adminBgSelectorModal) return;
-    
+
     adminBgSelectorModal.classList.remove('hidden');
     adminBgLoading.classList.remove('hidden');
     adminBgEmpty.classList.add('hidden');
     adminBgGrid.innerHTML = '';
-    
+
     try {
         // Fetch admin backgrounds from Firestore
         const snapshot = await getDocs(collection(db, 'admin_backgrounds'));
         const backgrounds = [];
-        
+
         snapshot.forEach(doc => {
             backgrounds.push({
                 id: doc.id,
                 ...doc.data()
             });
         });
-        
+
         adminBgLoading.classList.add('hidden');
-        
+
         if (backgrounds.length === 0) {
             adminBgEmpty.classList.remove('hidden');
             return;
         }
-        
+
         // Render backgrounds
         backgrounds.forEach(bg => {
             const bgItem = document.createElement('div');
@@ -3498,11 +3537,11 @@ async function openAdminBgSelector() {
                 <img src="${bg.thumbnailUrl || bg.url}" alt="${bg.name}" onerror="this.src='${bg.url}'">
                 <div class="admin-bg-name">${bg.name}</div>
             `;
-            
+
             bgItem.addEventListener('click', () => selectAdminBackground(bg));
             adminBgGrid.appendChild(bgItem);
         });
-        
+
     } catch (error) {
         console.error('Error loading admin backgrounds:', error);
         adminBgLoading.classList.add('hidden');
@@ -3519,7 +3558,7 @@ function closeAdminBgSelector() {
 
 async function selectAdminBackground(bg) {
     if (!currentChatId) return;
-    
+
     try {
         // Update the bgImage field in the theme
         const currentTheme = chatThemes.get(currentChatId) || getDefaultTheme();
@@ -3530,27 +3569,27 @@ async function selectAdminBackground(bg) {
             updatedBy: currentUser.uid,
             updatedAt: serverTimestamp()
         };
-        
+
         // Save to local map
         chatThemes.set(currentChatId, updatedTheme);
-        
+
         // Save to localStorage
         const themesData = JSON.stringify(Array.from(chatThemes.entries()));
         localStorage.setItem(`themes_${currentUser.uid}`, themesData);
-        
+
         // Save to Firestore
         const themeRef = doc(db, 'chats', currentChatId, 'metadata', 'theme');
         await setDoc(themeRef, updatedTheme, { merge: true });
-        
+
         // Apply theme to chat
         applyThemeToChat(updatedTheme);
-        
+
         // Close the selector modal
         closeAdminBgSelector();
-        
+
         // Show success notification
         showNotification(`✅ Background "${bg.name}" applied!`, 2000);
-        
+
     } catch (error) {
         console.error('Error applying background:', error);
         showNotification('❌ Failed to apply background', 2000);
@@ -3819,6 +3858,14 @@ if (window.visualViewport) {
 // ===========================
 function isMobileDevice() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function restoreMessageInputFocus() {
+    if (messageInput && isMobileDevice()) {
+        setTimeout(() => {
+            messageInput.focus();
+        }, 100);
+    }
 }
 
 function focusInputAndKeepKeyboard() {
@@ -4607,6 +4654,8 @@ if (mediaMenuBtn) {
         if (mediaMenu) {
             mediaMenu.classList.toggle('hidden');
         }
+        // Restore focus to keep keyboard open on mobile
+        restoreMessageInputFocus();
     });
 }
 
@@ -4642,6 +4691,9 @@ if (mediaMenu) {
                 window.voiceMessenger.startRecordingUI();
             }
         }
+
+        // Restore focus to keep keyboard open on mobile
+        restoreMessageInputFocus();
     });
 }
 
@@ -4970,18 +5022,34 @@ async function handleGifSelect(url) {
 // ===========================
 async function openStickerSheet() {
     if (!stickerSheet) return;
-    
+
     // Render all sticker sections
     renderDefaultStickers();
     renderAdminStickers();
     renderCustomStickers();
-    
+
+    // Remove hidden class to trigger fade-in animation
     stickerSheet.classList.remove('hidden');
+    stickerSheet.classList.remove('closing');
+
+    // Restore focus to keep keyboard open on mobile
+    restoreMessageInputFocus();
 }
 
 function closeStickerSheet() {
     if (!stickerSheet) return;
-    stickerSheet.classList.add('hidden');
+
+    // Add closing class for exit animation
+    stickerSheet.classList.add('closing');
+
+    // Wait for animation to complete before hiding
+    setTimeout(() => {
+        stickerSheet.classList.add('hidden');
+        stickerSheet.classList.remove('closing');
+
+        // Restore focus to keep keyboard open on mobile
+        restoreMessageInputFocus();
+    }, 250); // Match animation duration
 }
 
 function renderDefaultStickers() {
@@ -5034,6 +5102,11 @@ async function handleStickerSelect(url) {
     try {
         await sendMediaMessage(url, 'sticker');
         closeStickerSheet();
+
+        // Restore focus to keep keyboard open on mobile after sending
+        setTimeout(() => {
+            restoreMessageInputFocus();
+        }, 300); // Wait for close animation
     } catch (error) {
         console.error('Error sending sticker:', error);
         alert('Could not send this sticker. Please try again.');

@@ -3326,29 +3326,82 @@ body {
     inset: 0;
     z-index: 1350;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.sticker-sheet:not(.hidden) {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .sticker-sheet.hidden {
-    display: none;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .sheet-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: backdropFadeIn 0.3s ease;
+}
+
+@keyframes backdropFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 .sticker-panel {
     position: relative;
-    width: 100%;
-    max-width: 640px;
+    width: 90%;
+    max-width: 540px;
     background: var(--sidebar-bg);
-    border-radius: 24px 24px 0 0;
+    border-radius: 24px;
     padding: 20px 24px 28px;
-    box-shadow: 0 -10px 50px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    animation: modalSlideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.sticker-sheet.closing .sticker-panel {
+    animation: modalSlideOut 0.25s ease forwards;
+}
+
+@keyframes modalSlideOut {
+    from {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+    }
 }
 
 .sticker-panel-header {
@@ -3385,12 +3438,23 @@ body {
 
 .sticker-panel-body {
     margin-top: 18px;
-    max-height: 45vh;
-    min-height: 200px;
+    flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 20px;
+    min-height: 0;
+    /* Hide scrollbar for Chrome, Safari and Opera */
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+}
+
+.sticker-panel-body::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari, Opera */
 }
 
 .sticker-section-title {
@@ -3406,6 +3470,7 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
     gap: 10px;
     width: 100%;
+    overflow: hidden;
 }
 
 .sticker-card {
@@ -3417,14 +3482,86 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 0.15s ease, background 0.15s ease;
+    transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
     min-height: 74px;
     aspect-ratio: 1;
+    /* Touch-friendly minimum size */
+    min-width: 44px;
 }
 
 .sticker-card:hover {
-    transform: translateY(-2px);
+    transform: scale(1.05);
     background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.sticker-card:active {
+    transform: scale(0.95);
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+    .sticker-panel {
+        width: 95%;
+        max-width: none;
+        padding: 16px 20px 24px;
+        max-height: 80vh;
+    }
+
+    .sticker-panel-header h3 {
+        font-size: 18px;
+    }
+
+    .sticker-panel-header p {
+        font-size: 12px;
+    }
+
+    .sticker-panel-actions .secondary {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .sticker-grid {
+        grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+        gap: 8px;
+    }
+
+    .sticker-card {
+        min-height: 64px;
+        border-radius: 14px;
+    }
+
+    .sticker-section-title {
+        font-size: 11px;
+        margin-bottom: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .sticker-panel {
+        width: 98%;
+        padding: 14px 16px 20px;
+    }
+
+    .sticker-grid {
+        grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+        gap: 6px;
+    }
+
+    .sticker-card {
+        min-height: 58px;
+    }
+
+    .sticker-panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .sticker-panel-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
 }
 
 /* ===========================
@@ -4191,20 +4328,24 @@ video.story-viewer-media {
     background: #111015;
     border-radius: 18px;
     padding: 14px;
-    width: min(320px, 100%);
+    width: 100%;
+    max-width: 320px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 15px 28px rgba(0, 0, 0, 0.35);
 }
 
-.watch-party-header {
-    display: flex;
+.watch-party-chip {
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    font-size: 13px;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-bottom: 8px;
-    color: rgba(255, 255, 255, 0.65);
+    letter-spacing: 0.2em;
+    margin-bottom: 14px;
+    color: rgba(255, 255, 255, 0.75);
 }
 
 .watch-party-body {
@@ -4236,13 +4377,16 @@ video.story-viewer-media {
 
 .watch-party-host {
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-.watch-party-status {
-    margin-top: 10px;
+.watch-party-status-row {
+    margin-top: 8px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.7);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -4251,7 +4395,7 @@ video.story-viewer-media {
 .watch-party-btn {
     margin-top: 12px;
     width: 100%;
-    padding: 10px 14px;
+    padding: 12px 16px;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(255, 255, 255, 0.08);
@@ -4259,6 +4403,10 @@ video.story-viewer-media {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
 }
 
 .watch-party-btn:hover {
@@ -4268,6 +4416,43 @@ video.story-viewer-media {
 .watch-party-btn.expired {
     cursor: not-allowed;
     opacity: 0.5;
+}
+
+.watch-party-icon-cell {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.watch-party-icon {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.watch-party-icon.subtle {
+    opacity: 0.75;
+}
+
+.watch-party-icon.success {
+    color: #34d399;
+}
+
+.watch-party-icon.danger {
+    color: #f87171;
+}
+
+.watch-party-icon.arrow {
+    width: 20px;
+    height: 20px;
 }
 
 /* ===========================
@@ -5761,7 +5946,7 @@ video.story-viewer-media {
     margin-bottom: 24px;
 }
 
-.theme-presets-section > label {
+.theme-presets-section>label {
     display: block;
     font-weight: 600;
     font-size: 13px;
@@ -5886,7 +6071,7 @@ video.story-viewer-media {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.theme-preview-section > label {
+.theme-preview-section>label {
     display: block;
     font-weight: 600;
     font-size: 13px;
@@ -5943,7 +6128,7 @@ video.story-viewer-media {
     margin-bottom: 24px;
 }
 
-.theme-custom-section > label {
+.theme-custom-section>label {
     display: block;
     font-weight: 600;
     font-size: 13px;
@@ -6031,7 +6216,7 @@ video.story-viewer-media {
     margin-bottom: 24px;
 }
 
-.theme-bg-section > label {
+.theme-bg-section>label {
     display: block;
     font-weight: 600;
     font-size: 13px;
@@ -6054,7 +6239,7 @@ video.story-viewer-media {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.bg-option > label {
+.bg-option>label {
     display: block;
     font-size: 12px;
     color: #fff;
@@ -6215,11 +6400,11 @@ video.story-viewer-media {
         gap: 12px;
     }
 
-    .theme-custom-section > label {
+    .theme-custom-section>label {
         font-size: 12px;
     }
 
-    .theme-bg-section > label {
+    .theme-bg-section>label {
         font-size: 12px;
     }
 
@@ -6227,7 +6412,7 @@ video.story-viewer-media {
         padding: 12px;
     }
 
-    .bg-option > label {
+    .bg-option>label {
         font-size: 11px;
         margin-bottom: 10px;
     }

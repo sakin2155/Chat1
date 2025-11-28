@@ -23,6 +23,7 @@ let userProfile = {}; // Store important user information
 let lastMessageTime = Date.now(); // Track last message time
 let inactivityTimer = null; // Timer for auto-engagement
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
+let keyboardWasOpen = false; // Track if keyboard was open before sending message
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -37,6 +38,8 @@ function setupEventListeners() {
     // Send button - prevent keyboard from closing by keeping focus on input
     sendBtn.addEventListener('click', (e) => {
         e.preventDefault();
+        // Track if keyboard was open before sending
+        keyboardWasOpen = document.activeElement === messageInput;
         messageInput.focus();
         sendMessage();
     });
@@ -225,20 +228,23 @@ async function sendMessage() {
         isLoading = false;
         sendBtn.disabled = false;
         
-        // Keep keyboard open on mobile with multiple focus attempts
-        // First immediate focus
-        messageInput.focus();
-        
-        // Second focus after DOM updates settle
-        setTimeout(() => {
+        // Only restore keyboard if it was open before sending
+        if (keyboardWasOpen) {
+            // Keep keyboard open on mobile with multiple focus attempts
+            // First immediate focus
             messageInput.focus();
-            messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 10);
-        
-        // Third focus to ensure keyboard stays open
-        setTimeout(() => {
-            messageInput.focus();
-        }, 50);
+            
+            // Second focus after DOM updates settle
+            setTimeout(() => {
+                messageInput.focus();
+                messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 10);
+            
+            // Third focus to ensure keyboard stays open
+            setTimeout(() => {
+                messageInput.focus();
+            }, 50);
+        }
     }
 }
 

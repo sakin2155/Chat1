@@ -34,7 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Setup Event Listeners
 function setupEventListeners() {
-    sendBtn.addEventListener('click', sendMessage);
+    // Send button - prevent keyboard from closing by keeping focus on input
+    sendBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        messageInput.focus();
+        sendMessage();
+    });
     backBtn.addEventListener('click', goBack);
     clearChatBtn.addEventListener('click', clearConversation);
     messageInput.addEventListener('keydown', (e) => {
@@ -166,11 +171,17 @@ async function sendMessage() {
     // Extract and store important user information
     extractAndStoreUserInfo(message);
 
+    // Keep keyboard open on mobile - focus before clearing
+    messageInput.focus();
+    
     // Add user message to UI
     addMessageToUI(message, 'user');
     messageInput.value = '';
     messageInput.style.height = 'auto';
     clearError();
+    
+    // Re-focus to keep keyboard open
+    messageInput.focus();
     
     // Auto-scroll to latest message
     scrollToLatestMessage();
@@ -213,11 +224,20 @@ async function sendMessage() {
         hideTypingIndicator();
         isLoading = false;
         sendBtn.disabled = false;
-        // Keep keyboard open on mobile by re-focusing with a small delay
+        
+        // Keep keyboard open on mobile with multiple focus attempts
+        // First immediate focus
+        messageInput.focus();
+        
+        // Second focus after DOM updates settle
         setTimeout(() => {
             messageInput.focus();
-            // Ensure the input is scrolled into view on mobile
             messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 10);
+        
+        // Third focus to ensure keyboard stays open
+        setTimeout(() => {
+            messageInput.focus();
         }, 50);
     }
 }

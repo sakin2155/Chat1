@@ -818,6 +818,14 @@ adminBtns.forEach(btn => {
     });
 });
 
+// AI Assistant Navigation
+const aiAssistantBtn = document.getElementById('ai-assistant-btn');
+if (aiAssistantBtn) {
+    aiAssistantBtn.addEventListener('click', () => {
+        window.location.href = 'ai-assistant.html';
+    });
+}
+
 document.getElementById('logout-btn').addEventListener('click', async () => {
     try {
         showLoading('Logging out...');

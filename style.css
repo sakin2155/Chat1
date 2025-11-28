@@ -1539,6 +1539,36 @@ body {
     background-color: #444444;
 }
 
+.ai-assistant-btn {
+    background-color: transparent;
+    box-shadow: none;
+    padding: 4px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.aria-footer-image {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.3s ease;
+}
+
+.ai-assistant-btn:hover .aria-footer-image {
+    border-color: rgba(255, 105, 180, 0.8);
+    box-shadow: 0 0 12px rgba(255, 105, 180, 0.5);
+    transform: scale(1.1);
+}
+
+.ai-assistant-btn:active .aria-footer-image {
+    transform: scale(0.95);
+}
+
 .admin-panel-btn {
     background-color: #555555;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);

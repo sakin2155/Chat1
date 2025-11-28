@@ -58,6 +58,17 @@ function autoResizeTextarea() {
     messageInput.style.height = Math.min(messageInput.scrollHeight, 100) + 'px';
 }
 
+// Auto-scroll to latest message with smooth behavior
+function scrollToLatestMessage() {
+    // Use requestAnimationFrame for smooth scrolling
+    requestAnimationFrame(() => {
+        messagesContainer.scrollTo({
+            top: messagesContainer.scrollHeight,
+            behavior: 'smooth'
+        });
+    });
+}
+
 // Inactivity Timer - Auto-engagement after 5 minutes
 function startInactivityTimer() {
     // Clear existing timer if any
@@ -160,6 +171,9 @@ async function sendMessage() {
     messageInput.value = '';
     messageInput.style.height = 'auto';
     clearError();
+    
+    // Auto-scroll to latest message
+    scrollToLatestMessage();
 
     // Add to conversation history
     conversationHistory.push({
@@ -187,6 +201,9 @@ async function sendMessage() {
 
         // Save conversation
         saveConversationHistory();
+        
+        // Auto-scroll to latest message
+        scrollToLatestMessage();
     } catch (error) {
         console.error('Error:', error);
         showError(error.message || 'Failed to get response from AI. Please try again.');
@@ -196,7 +213,12 @@ async function sendMessage() {
         hideTypingIndicator();
         isLoading = false;
         sendBtn.disabled = false;
-        messageInput.focus();
+        // Keep keyboard open on mobile by re-focusing with a small delay
+        setTimeout(() => {
+            messageInput.focus();
+            // Ensure the input is scrolled into view on mobile
+            messageInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 50);
     }
 }
 
@@ -1345,6 +1367,8 @@ function loadConversationHistory() {
             conversationHistory.forEach(msg => {
                 addMessageToUI(msg.content, msg.role);
             });
+            // Auto-scroll to latest message after loading
+            setTimeout(() => scrollToLatestMessage(), 100);
         }
     } catch (error) {
         console.error('Failed to load conversation history:', error);

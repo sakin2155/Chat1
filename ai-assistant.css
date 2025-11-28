@@ -162,23 +162,31 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    scroll-behavior: smooth;
 }
 
 .ai-messages-container::-webkit-scrollbar {
-    width: 6px;
+    width: 0;
+    display: none;
 }
 
 .ai-messages-container::-webkit-scrollbar-track {
     background: transparent;
+    display: none;
 }
 
 .ai-messages-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
+    background: transparent;
+    display: none;
 }
 
 .ai-messages-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: transparent;
+    display: none;
+}
+
+.ai-messages-container {
+    scrollbar-width: none;
 }
 
 /* Welcome Message */
@@ -369,7 +377,6 @@ body {
     gap: 0;
     padding: 16px 20px;
     background: rgba(15, 15, 30, 0.8);
-    border-top: 1px solid rgba(0, 132, 255, 0.15);
     backdrop-filter: blur(30px);
     box-shadow: 0 -4px 20px rgba(0, 132, 255, 0.05);
 }
@@ -379,6 +386,7 @@ body {
     gap: 10px;
     width: 100%;
     align-items: center;
+    transition: all 0.2s ease;
 }
 
 #ai-message-input {
@@ -393,7 +401,7 @@ body {
     resize: none;
     max-height: 120px;
     outline: none;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     line-height: 1.5;
     overflow-y: auto;
     scrollbar-width: none;
@@ -434,7 +442,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     flex-shrink: 0;
     box-shadow: 0 4px 16px rgba(0, 132, 255, 0.35);
     font-weight: 600;

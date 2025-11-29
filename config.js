@@ -25,9 +25,20 @@ async function loadEnvConfig() {
 
 // Export for use in other files
 let ENV_CONFIG = {};
+let configLoaded = false;
 
-// Initialize config on page load
-loadEnvConfig().then(config => {
+// Initialize config immediately
+const configPromise = loadEnvConfig().then(config => {
     ENV_CONFIG = config;
-    console.log('Environment config loaded');
+    configLoaded = true;
+    console.log('Environment config loaded:', Object.keys(ENV_CONFIG));
+    return config;
 });
+
+// Function to wait for config to be loaded
+async function waitForConfig() {
+    if (!configLoaded) {
+        await configPromise;
+    }
+    return ENV_CONFIG;
+}

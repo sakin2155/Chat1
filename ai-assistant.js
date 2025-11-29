@@ -8,12 +8,22 @@ let GEMINI_API_KEY = '';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
 
 // Load API key from environment config
-function initializeAPIKey() {
-    if (typeof ENV_CONFIG !== 'undefined' && ENV_CONFIG.GEMINI_API_KEY) {
-        GEMINI_API_KEY = ENV_CONFIG.GEMINI_API_KEY;
-        console.log('API key loaded from .env file');
-    } else {
-        console.warn('API key not found in environment config');
+async function initializeAPIKey() {
+    try {
+        // Wait for config to be loaded
+        if (typeof waitForConfig === 'function') {
+            const config = await waitForConfig();
+            if (config && config.GEMINI_API_KEY) {
+                GEMINI_API_KEY = config.GEMINI_API_KEY;
+                console.log('✅ API key loaded from .env file');
+                return true;
+            }
+        }
+        console.warn('⚠️ API key not found in environment config');
+        return false;
+    } catch (error) {
+        console.error('❌ Error initializing API key:', error);
+        return false;
     }
 }
 
@@ -37,8 +47,8 @@ const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 let keyboardWasOpen = false; // Track if keyboard was open before sending message
 
 // Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    initializeAPIKey();
+document.addEventListener('DOMContentLoaded', async () => {
+    await initializeAPIKey();
     setupEventListeners();
     loadUserProfile();
     loadConversationHistory();

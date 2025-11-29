@@ -13,13 +13,16 @@ async function initializeAPIKey() {
         // Wait for config to be loaded
         if (typeof waitForConfig === 'function') {
             const config = await waitForConfig();
+            console.log('🔍 Config received:', config);
+            console.log('🔍 GEMINI_API_KEY value:', config?.GEMINI_API_KEY);
             if (config && config.GEMINI_API_KEY) {
                 GEMINI_API_KEY = config.GEMINI_API_KEY;
-                console.log('✅ API key loaded from .env file');
+                console.log('✅ API key loaded from .env file:', GEMINI_API_KEY.substring(0, 10) + '...');
                 return true;
             }
         }
         console.warn('⚠️ API key not found in environment config');
+        console.log('⚠️ ENV_CONFIG value:', ENV_CONFIG);
         return false;
     } catch (error) {
         console.error('❌ Error initializing API key:', error);

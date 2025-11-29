@@ -1,24 +1,21 @@
-// Load environment variables from .env file
+// Load environment variables from env-config.json (works on all hosting platforms)
 async function loadEnvConfig() {
     try {
-        const response = await fetch('.env');
-        const text = await response.text();
-        const lines = text.split('\n');
-        const config = {};
+        console.log('🔄 Attempting to load env-config.json...');
+        const response = await fetch('env-config.json');
+        console.log('📥 env-config.json fetch response status:', response.status);
         
-        lines.forEach(line => {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#')) {
-                const [key, value] = trimmed.split('=');
-                if (key && value) {
-                    config[key.trim()] = value.trim();
-                }
-            }
-        });
+        if (!response.ok) {
+            console.error('❌ Failed to fetch env-config.json:', response.status, response.statusText);
+            return {};
+        }
         
+        const config = await response.json();
+        console.log('📋 Config loaded successfully');
+        console.log('✅ GEMINI_API_KEY loaded:', config.GEMINI_API_KEY ? config.GEMINI_API_KEY.substring(0, 10) + '...' : 'NOT FOUND');
         return config;
     } catch (error) {
-        console.error('Error loading .env file:', error);
+        console.error('❌ Error loading env-config.json:', error);
         return {};
     }
 }

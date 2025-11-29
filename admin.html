@@ -377,7 +377,7 @@
                                         </svg>
                                         <p>Drag & drop your sticker here or click to browse</p>
                                         <p class="file-upload-hint">Supports PNG, WebP, GIF (Max 2MB)</p>
-                                        <input type="file" id="stickerFileInput" class="file-input" accept="image/png,image/webp,image/gif">
+                                        <input type="file" id="stickerFileInput" class="file-input" accept="image/png,image/webp,image/gif" multiple>
                                     </div>
                                 </div>
                                 
@@ -392,12 +392,8 @@
                                             </svg>
                                         </button>
                                     </div>
-                                    <div class="preview-content">
-                                        <img id="stickerPreviewImage" src="" alt="Sticker preview" class="preview-image">
-                                        <div class="preview-info">
-                                            <p class="preview-filename" id="stickerPreviewFilename"></p>
-                                            <p class="preview-size" id="stickerPreviewSize"></p>
-                                        </div>
+                                    <div class="preview-content" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px;">
+                                        <!-- Preview items will be added here -->
                                     </div>
                                 </div>
                                 
@@ -414,7 +410,7 @@
                                 
                                 <div class="form-actions">
                                     <button id="cancelStickerUploadBtn" class="btn btn-secondary">Cancel</button>
-                                    <button id="confirmStickerUploadBtn" class="btn btn-primary">Upload Sticker</button>
+                                    <button id="confirmStickerUploadBtn" class="btn btn-primary">Upload Stickers</button>
                                 </div>
                             </div>
                         </div>

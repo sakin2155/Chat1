@@ -956,6 +956,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.dataTransfer.files.length) {
                 if (stickerFileInput) {
                     stickerFileInput.files = e.dataTransfer.files;
+                    // Trigger change event to show previews
+                    const changeEvent = new Event('change', { bubbles: true });
+                    stickerFileInput.dispatchEvent(changeEvent);
                 }
             }
         });
@@ -971,22 +974,33 @@ document.addEventListener('DOMContentLoaded', function() {
     // File input change listener for sticker
     if (stickerFileInput) {
         stickerFileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                // Show preview
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const previewContainer = document.getElementById('stickerPreviewContainer');
-                    const previewImage = document.getElementById('stickerPreviewImage');
-                    const previewFilename = document.getElementById('stickerPreviewFilename');
-                    const previewSize = document.getElementById('stickerPreviewSize');
-                    
-                    previewImage.src = event.target.result;
-                    previewFilename.textContent = file.name;
-                    previewSize.textContent = (file.size / 1024).toFixed(2) + ' KB';
-                    previewContainer.classList.remove('hidden');
-                };
-                reader.readAsDataURL(file);
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                // Show preview for all selected files
+                const previewContainer = document.getElementById('stickerPreviewContainer');
+                const previewContent = previewContainer.querySelector('.preview-content');
+                previewContent.innerHTML = '';
+                
+                let totalSize = 0;
+                Array.from(files).forEach((file, index) => {
+                    totalSize += file.size;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const filePreview = document.createElement('div');
+                        filePreview.className = 'preview-item';
+                        filePreview.innerHTML = `
+                            <img src="${event.target.result}" alt="Sticker preview" class="preview-image">
+                            <div class="preview-info">
+                                <p class="preview-filename">${file.name}</p>
+                                <p class="preview-size">${(file.size / 1024).toFixed(2)} KB</p>
+                            </div>
+                        `;
+                        previewContent.appendChild(filePreview);
+                    };
+                    reader.readAsDataURL(file);
+                });
+                
+                previewContainer.classList.remove('hidden');
             }
         });
     }
@@ -1259,18 +1273,24 @@ function renderStickers(stickers) {
 
 async function handleStickerUpload() {
     const stickerFileInput = document.getElementById('stickerFileInput');
-    const file = stickerFileInput.files[0];
+    const files = stickerFileInput.files;
     
-    if (!file) {
-        showAlert('Error', 'Please select a sticker file');
+    console.log('Sticker upload started. Files count:', files ? files.length : 0);
+    
+    if (!files || files.length === 0) {
+        showAlert('Error', 'Please select at least one sticker file');
         return;
     }
     
-    // Validate file type
+    console.log('Uploading', files.length, 'sticker(s)');
+    
+    // Validate all file types
     const validTypes = ['image/png', 'image/webp', 'image/gif'];
-    if (!validTypes.includes(file.type)) {
-        showAlert('Error', 'Please select a valid image file (PNG, WebP, or GIF)');
-        return;
+    for (let file of files) {
+        if (!validTypes.includes(file.type)) {
+            showAlert('Error', `Invalid file type: ${file.name}. Please select valid image files (PNG, WebP, or GIF)`);
+            return;
+        }
     }
     
     try {
@@ -1280,66 +1300,76 @@ async function handleStickerUpload() {
         const progressPercent = document.getElementById('stickerProgressPercent');
         progressContainer.classList.remove('hidden');
         
-        // Upload to Cloudinary with progress tracking
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', 'chat123');
+        let uploadedCount = 0;
+        const totalFiles = files.length;
         
-        const xhr = new XMLHttpRequest();
-        
-        // Track upload progress
-        xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-                const percentComplete = (e.loaded / e.total) * 100;
-                progressBar.style.width = percentComplete + '%';
-                progressPercent.textContent = Math.round(percentComplete) + '%';
-            }
-        });
-        
-        // Handle completion
-        xhr.addEventListener('load', async () => {
-            if (xhr.status === 200) {
-                const data = JSON.parse(xhr.responseText);
+        // Upload each file
+        for (let file of files) {
+            await new Promise((resolve, reject) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('upload_preset', 'chat123');
                 
-                if (data.secure_url) {
-                    // Save to Firestore
-                    await db.collection('admin_stickers').add({
-                        url: data.secure_url,
-                        uploadedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        uploadedBy: 'admin'
-                    });
-                    
-                    // Reset form
-                    document.getElementById('stickerUploadSection').classList.add('hidden');
-                    document.getElementById('stickerPreviewContainer').classList.add('hidden');
-                    progressContainer.classList.add('hidden');
-                    stickerFileInput.value = '';
-                    progressBar.style.width = '0%';
-                    progressPercent.textContent = '0%';
-                    
-                    // Reload stickers
-                    await loadStickers();
-                    showAlert('Success', 'Sticker uploaded successfully');
-                } else {
-                    throw new Error('Upload failed');
-                }
-            } else {
-                throw new Error('Upload failed');
-            }
-        });
+                const xhr = new XMLHttpRequest();
+                
+                // Track upload progress
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const fileProgress = (e.loaded / e.total) * 100;
+                        const overallProgress = ((uploadedCount + fileProgress / 100) / totalFiles) * 100;
+                        progressBar.style.width = overallProgress + '%';
+                        progressPercent.textContent = Math.round(overallProgress) + '%';
+                    }
+                });
+                
+                // Handle completion
+                xhr.addEventListener('load', async () => {
+                    if (xhr.status === 200) {
+                        const data = JSON.parse(xhr.responseText);
+                        
+                        if (data.secure_url) {
+                            // Save to Firestore
+                            await db.collection('admin_stickers').add({
+                                url: data.secure_url,
+                                uploadedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                uploadedBy: 'admin'
+                            });
+                            
+                            uploadedCount++;
+                            resolve();
+                        } else {
+                            reject(new Error('Upload failed'));
+                        }
+                    } else {
+                        reject(new Error('Upload failed'));
+                    }
+                });
+                
+                xhr.addEventListener('error', () => {
+                    reject(new Error('Upload failed'));
+                });
+                
+                xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`);
+                xhr.send(formData);
+            });
+        }
         
-        xhr.addEventListener('error', () => {
-            progressContainer.classList.add('hidden');
-            showAlert('Error', 'Failed to upload sticker');
-        });
+        // Reset form after all uploads complete
+        document.getElementById('stickerUploadSection').classList.add('hidden');
+        document.getElementById('stickerPreviewContainer').classList.add('hidden');
+        progressContainer.classList.add('hidden');
+        stickerFileInput.value = '';
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
         
-        xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`);
-        xhr.send(formData);
+        // Reload stickers
+        await loadStickers();
+        showAlert('Success', `${uploadedCount} sticker(s) uploaded successfully`);
         
     } catch (error) {
         console.error('Error uploading sticker:', error);
         document.getElementById('stickerProgressContainer').classList.add('hidden');
-        showAlert('Error', 'Failed to upload sticker');
+        showAlert('Error', `Failed to upload sticker: ${error.message}`);
     }
 }
 

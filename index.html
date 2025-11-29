@@ -468,8 +468,21 @@
     <div id="chat-settings-modal" class="modal hidden">
         <div class="modal-content chat-settings-modal">
             <span class="close-modal" id="close-chat-settings">&times;</span>
-            <h2>Chat Settings</h2>
+            <div class="chat-settings-header">
+                <h2>Chat Settings</h2>
+            </div>
             <div class="chat-settings-body">
+                <!-- Profile Section -->
+                <div class="chat-settings-profile-section">
+                    <div class="profile-avatar-container">
+                        <div class="chat-settings-avatar" id="chat-settings-avatar">?</div>
+                    </div>
+                    <div class="profile-info-container">
+                        <div class="profile-name" id="chat-settings-profile-name">User Name</div>
+                        <div class="profile-status" id="chat-settings-profile-status">Messenger</div>
+                    </div>
+                </div>
+
                 <!-- Nickname Section -->
                 <div class="nickname-section">
                     <label for="nickname-input">Nickname for this chat</label>

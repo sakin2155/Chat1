@@ -400,6 +400,19 @@ if (chatSettingsModal) {
             closeChatSettingsModal();
         }
     });
+
+    // Handle back button click on the h2 element
+    const chatSettingsHeader = chatSettingsModal.querySelector('.chat-settings-header h2');
+    if (chatSettingsHeader) {
+        chatSettingsHeader.addEventListener('click', (e) => {
+            // Check if click is on the back arrow area (first 60px of h2)
+            const rect = chatSettingsHeader.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            if (clickX <= 60) {
+                closeChatSettingsModal();
+            }
+        });
+    }
 }
 if (selectAdminBgBtn) {
     selectAdminBgBtn.addEventListener('click', openAdminBgSelector);
@@ -3082,6 +3095,29 @@ async function confirmDeleteAccount() {
 // ===========================
 function openChatSettingsModal() {
     if (!chatSettingsModal || !currentChatUser) return;
+
+    // Populate profile section
+    const chatSettingsAvatar = document.getElementById('chat-settings-avatar');
+    const chatSettingsProfileName = document.getElementById('chat-settings-profile-name');
+    const chatSettingsProfileStatus = document.getElementById('chat-settings-profile-status');
+    
+    if (chatSettingsAvatar) {
+        chatSettingsAvatar.textContent = currentChatUser.displayName?.charAt(0).toUpperCase() || '?';
+        if (currentChatUser.photoURL) {
+            chatSettingsAvatar.style.backgroundImage = `url(${currentChatUser.photoURL})`;
+            chatSettingsAvatar.style.backgroundSize = 'cover';
+            chatSettingsAvatar.style.backgroundPosition = 'center';
+            chatSettingsAvatar.textContent = '';
+        }
+    }
+    
+    if (chatSettingsProfileName) {
+        chatSettingsProfileName.textContent = currentChatUser.displayName || 'User';
+    }
+    
+    if (chatSettingsProfileStatus) {
+        chatSettingsProfileStatus.textContent = currentChatUser.statusMessage || 'Messenger';
+    }
 
     // Load current nickname if exists
     const nickname = userNicknames.get(currentChatUser.uid) || '';

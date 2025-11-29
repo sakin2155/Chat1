@@ -3,32 +3,9 @@
 // ===========================
 
 // Gemini API Configuration
-// API key is loaded from .env file via config.js
-let GEMINI_API_KEY = '';
+// Get your free API key from: https://aistudio.google.com/app/apikeys
+const GEMINI_API_KEY = 'AIzaSyDPZOZQwzEOi69TH47SQXOx1PiQJyFWuvQ';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
-
-// Load API key from environment config
-async function initializeAPIKey() {
-    try {
-        // Wait for config to be loaded
-        if (typeof waitForConfig === 'function') {
-            const config = await waitForConfig();
-            console.log('🔍 Config received:', config);
-            console.log('🔍 GEMINI_API_KEY value:', config?.GEMINI_API_KEY);
-            if (config && config.GEMINI_API_KEY) {
-                GEMINI_API_KEY = config.GEMINI_API_KEY;
-                console.log('✅ API key loaded from .env file:', GEMINI_API_KEY.substring(0, 10) + '...');
-                return true;
-            }
-        }
-        console.warn('⚠️ API key not found in environment config');
-        console.log('⚠️ ENV_CONFIG value:', ENV_CONFIG);
-        return false;
-    } catch (error) {
-        console.error('❌ Error initializing API key:', error);
-        return false;
-    }
-}
 
 // DOM Elements
 const messagesContainer = document.getElementById('ai-messages-container');
@@ -50,8 +27,7 @@ const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 let keyboardWasOpen = false; // Track if keyboard was open before sending message
 
 // Initialize
-document.addEventListener('DOMContentLoaded', async () => {
-    await initializeAPIKey();
+document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     loadUserProfile();
     loadConversationHistory();

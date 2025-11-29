@@ -3,9 +3,19 @@
 // ===========================
 
 // Gemini API Configuration
-// Get your free API key from: https://aistudio.google.com/app/apikeys
-const GEMINI_API_KEY = 'AIzaSyCRrbdjIWer4Ezbt_niri9-xN2N4iuapjQ';
+// API key is loaded from .env file via config.js
+let GEMINI_API_KEY = '';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
+
+// Load API key from environment config
+function initializeAPIKey() {
+    if (typeof ENV_CONFIG !== 'undefined' && ENV_CONFIG.GEMINI_API_KEY) {
+        GEMINI_API_KEY = ENV_CONFIG.GEMINI_API_KEY;
+        console.log('API key loaded from .env file');
+    } else {
+        console.warn('API key not found in environment config');
+    }
+}
 
 // DOM Elements
 const messagesContainer = document.getElementById('ai-messages-container');
@@ -28,6 +38,7 @@ let keyboardWasOpen = false; // Track if keyboard was open before sending messag
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    initializeAPIKey();
     setupEventListeners();
     loadUserProfile();
     loadConversationHistory();

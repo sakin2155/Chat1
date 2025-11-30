@@ -415,10 +415,10 @@ async function loadGallery() {
             hasMore = false;
         }
 
-        snapshot.docs.forEach((doc) => {
+        snapshot.docs.forEach((doc, index) => {
             const imageData = doc.data();
             imageData.id = doc.id;
-            renderGalleryItem(imageData);
+            renderGalleryItem(imageData, index);
         });
 
         if (snapshot.docs.length > 0) {
@@ -432,14 +432,26 @@ async function loadGallery() {
     }
 }
 
-function renderGalleryItem(imageData) {
+function renderGalleryItem(imageData, index = 0) {
     const item = document.createElement('div');
     item.className = 'gallery-item';
     item.dataset.imageId = imageData.id;
+    
+    // Add staggered animation delay (max 12 items per page, stagger by 50ms)
+    const delay = Math.min(index * 0.05, 0.6);
+    item.style.animationDelay = `${delay}s`;
 
     const img = document.createElement('img');
+    img.loading = 'lazy';
     img.src = imageData.imageUrl;
     img.alt = imageData.title;
+    
+    // Preload image for instant display
+    const preloadImg = new Image();
+    preloadImg.onload = function() {
+        img.src = imageData.imageUrl;
+    };
+    preloadImg.src = imageData.imageUrl;
     
     // Load image to get natural dimensions for aspect ratio
     img.onload = function() {

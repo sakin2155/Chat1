@@ -1298,6 +1298,7 @@ function listenToUnreadCount(otherUserId, userItemEl) {
 // ===========================
 // Chat Window
 // ===========================
+
 async function openChat(userData) {
     currentChatUser = userData;
     currentChatId = getChatId(currentUser.uid, userData.uid);
@@ -1311,6 +1312,10 @@ async function openChat(userData) {
 
     // Mobile: show chat window
     chatWindowContainer.classList.add('active');
+    const userListContainer = document.getElementById('user-list-container');
+    if (userListContainer) {
+        userListContainer.classList.add('hidden-mobile');
+    }
 
     // Highlight selected user
     document.querySelectorAll('.user-item').forEach(item => {
@@ -1324,6 +1329,7 @@ async function openChat(userData) {
     if (!chatDoc.exists()) {
         await setDoc(chatRef, {
             participants: [currentUser.uid, userData.uid],
+            lastMessageTimestamp: serverTimestamp(),
             createdAt: serverTimestamp()
         });
     }
@@ -1356,6 +1362,10 @@ async function openChat(userData) {
 
 backToUsersBtn.addEventListener('click', () => {
     chatWindowContainer.classList.remove('active');
+    const userListContainer = document.getElementById('user-list-container');
+    if (userListContainer) {
+        userListContainer.classList.remove('hidden-mobile');
+    }
 });
 
 // ===========================

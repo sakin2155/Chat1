@@ -12,6 +12,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    font-family: var(--font-family);
 }
 
 html {
@@ -64,10 +65,25 @@ a {
     --border-color: #2c2c2e;
     --online-green: #31a24c;
     --typing-gray: #8e8e93;
+
+    /* Typography System - Messenger Standard */
+    --font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', sans-serif;
+    --font-size-base: 1rem;
+    --font-size-message: 0.9375rem;
+    --font-size-metadata: 0.6875rem;
+    --font-size-input: 1rem;
+    --line-height-normal: 1.4;
+    --line-height-tight: 1.2;
+}
+
+html {
+    font-size: 16px;
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
     background: var(--bg-dark);
     color: var(--text-white);
     height: 100vh;
@@ -1686,6 +1702,7 @@ body {
         opacity: 0;
         transform: translateY(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -1697,6 +1714,7 @@ body {
         opacity: 0;
         transform: translateX(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -1715,6 +1733,7 @@ body {
         opacity: 0;
         transform: translateX(20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -2893,6 +2912,44 @@ body {
     .message-bubble {
         max-width: 85%;
     }
+    
+    .message-group .message-bubble {
+        width: fit-content;
+        max-width: 85%;
+        word-wrap: break-word;
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .reply-bubble {
+        max-width: 85%;
+        padding: 8px 10px;
+    }
+    
+    .reply-bubble.reply-bubble-media-only {
+        padding: 0;
+    }
+    
+    .reply-context-media-preview.reply-media-only {
+        width: 100px;
+        height: 100px;
+        border-radius: 12px;
+        flex-shrink: 0;
+    }
+    
+    .reply-bubble-text {
+        font-size: 12px;
+        max-width: 160px;
+    }
+    
+    .reply-bubble-name {
+        font-size: 10px;
+        max-width: 160px;
+    }
+    
+    .reply-bubble-content {
+        gap: 1px;
+    }
 }
 
 .message.sent .message-bubble {
@@ -2907,11 +2964,35 @@ body {
     border-bottom-left-radius: 4px;
 }
 
+/* Messenger-style stacked bubble geometry */
+.message-group .message-bubble {
+    border-radius: 18px 4px 18px 18px;
+    max-width: none;
+    width: fit-content;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.message.sent .message-group .message-bubble {
+    border-radius: 18px 4px 18px 18px;
+    max-width: 70%;
+}
+
+.message.received .message-group .message-bubble {
+    border-radius: 4px 18px 18px 18px;
+    max-width: 70%;
+}
+
 .message-text {
-    font-size: 15px;
-    line-height: 1.4;
+    font-size: var(--font-size-message);
+    line-height: var(--line-height-normal);
     color: #ffffff;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: var(--font-family);
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
 }
 
 .message-image {
@@ -5484,37 +5565,80 @@ video.story-viewer-media {
    Message Threading & Reply Context
    =========================== */
 
-/* Reply Context Container */
-.message-reply-context {
+/* Message Group Container - Stacks reply and main message */
+.message-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: auto;
+    align-items: flex-end;
+}
+
+.message.sent .message-group {
+    margin-left: auto;
+    margin-right: 0;
+    align-items: flex-end;
+}
+
+.message.received .message-group {
+    margin-left: 0;
+    margin-right: auto;
+    align-items: flex-start;
+}
+
+/* Reply Bubble - Top part of stacked message */
+.reply-bubble {
     display: flex;
     align-items: center;
-    gap: 10px;
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    padding: 8px 10px;
-    border-radius: 8px;
-    margin-bottom: 8px;
-    border-left: 3px solid rgba(102, 126, 234, 0.6);
+    gap: 8px;
+    padding: 10px 12px;
     cursor: pointer;
     transition: all 0.2s ease;
     user-select: none;
     -webkit-user-select: none;
+    min-width: 0;
+    overflow: hidden;
+    max-width: 70%;
 }
 
-.message-reply-context:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-left-color: rgba(102, 126, 234, 0.9);
-    transform: translateX(2px);
+.reply-bubble:hover {
+    opacity: 0.85;
 }
 
-.message-reply-context:active {
-    transform: translateX(1px);
+.reply-bubble:active {
+    opacity: 0.75;
 }
 
-.message-reply-context:focus-visible {
+.reply-bubble:focus-visible {
     outline: 2px solid rgba(102, 126, 234, 0.8);
     outline-offset: -2px;
+}
+
+/* Media-only reply bubble (no text, just image) */
+.reply-bubble.reply-bubble-media-only {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    flex-shrink: 0;
+    width: fit-content;
+}
+
+/* Sent Message Reply Bubble */
+.message.sent .reply-bubble {
+    background: rgba(58, 58, 60, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 18px 18px 4px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Received Message Reply Bubble */
+.message.received .reply-bubble {
+    background: rgba(58, 58, 60, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 18px 18px 18px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Media Preview in Reply */
@@ -5522,12 +5646,20 @@ video.story-viewer-media {
     flex-shrink: 0;
     width: 40px;
     height: 40px;
-    border-radius: 6px;
+    border-radius: 8px;
     overflow: hidden;
     background: rgba(0, 0, 0, 0.2);
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Media-only reply bubble (larger preview) */
+.reply-context-media-preview.reply-media-only {
+    width: 120px;
+    height: 120px;
+    border-radius: 12px;
+    flex-shrink: 0;
 }
 
 .reply-media-thumbnail {
@@ -5537,70 +5669,55 @@ video.story-viewer-media {
     display: block;
 }
 
-/* Reply Context Content */
-.reply-context-content {
+/* Reply Bubble Content */
+.reply-bubble-content {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
     flex: 1;
+    overflow: hidden;
 }
 
-.reply-context-name {
-    font-size: 12px;
-    font-weight: 600;
-    color: rgba(102, 126, 234, 0.9);
+.reply-bubble-name {
+    font-size: var(--font-size-metadata);
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--font-family);
 }
 
-.reply-context-text {
-    font-size: 13px;
+.reply-bubble-text {
+    font-size: var(--font-size-message);
     color: rgba(255, 255, 255, 0.85);
     font-weight: 500;
+    font-family: var(--font-family);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     display: block;
+    min-width: 0;
+    max-width: 200px;
 }
 
-/* Sent Message Reply Context */
-.message.sent .message-reply-context {
-    background: rgba(255, 255, 255, 0.1);
-    border-left-color: rgba(255, 255, 255, 0.5);
-}
-
-.message.sent .message-reply-context:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-left-color: rgba(255, 255, 255, 0.7);
-}
-
-.message.sent .reply-context-name {
+/* Media Label in Reply Bubble */
+.reply-media-label {
+    font-size: 12px;
     color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
 }
 
-.message.sent .reply-context-text {
-    color: rgba(255, 255, 255, 0.9);
-}
-
-/* Received Message Reply Context */
-.message.received .message-reply-context {
-    background: rgba(255, 255, 255, 0.08);
-    border-left-color: rgba(102, 126, 234, 0.5);
-}
-
-.message.received .message-reply-context:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-left-color: rgba(102, 126, 234, 0.8);
-}
-
-.message.received .reply-context-name {
-    color: rgba(102, 126, 234, 0.9);
-}
-
-.message.received .reply-context-text {
-    color: rgba(255, 255, 255, 0.85);
+.reply-media-icon {
+    display: inline-block;
+    flex-shrink: 0;
 }
 
 /* Highlight Animation for Jump-to-Source */
@@ -5635,9 +5752,30 @@ video.story-viewer-media {
     }
 
     .reply-context-media-preview {
-        width: 36px;
-        height: 36px;
-        border-radius: 5px;
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+    }
+    
+    .reply-context-media-preview.reply-media-only {
+        width: 110px;
+        height: 110px;
+        border-radius: 12px;
+        flex-shrink: 0;
+    }
+    
+    .reply-bubble {
+        padding: 8px 10px;
+    }
+    
+    .reply-bubble-text {
+        font-size: 12px;
+        max-width: 180px;
+    }
+    
+    .reply-bubble-name {
+        font-size: 10px;
+        max-width: 180px;
     }
 
     .reply-context-name {

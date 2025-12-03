@@ -1627,39 +1627,72 @@ function createMessageElement(messageData) {
     }
 
     let replyHtml = '';
+    let hasReply = false;
     if (!isDeleted && messageData.replyTo) {
+        hasReply = true;
         const replyName = messageData.replyTo.senderName || 'Unknown';
         const replyText = messageData.replyTo.text || '[Message]';
         const replyMediaUrl = messageData.replyTo.imgUrl;
         const replyType = messageData.replyTo.type;
+        const isReplyDeleted = messageData.replyTo.isDeleted || false;
 
         console.log('Rendering reply context:', {
             replyType,
             replyMediaUrl,
             hasMediaUrl: !!replyMediaUrl,
-            isMediaType: replyType === 'image' || replyType === 'sticker' || replyType === 'gif'
+            isMediaType: replyType === 'image' || replyType === 'sticker' || replyType === 'gif',
+            isReplyDeleted
         });
 
+        let mediaIconHtml = '';
         let mediaPreviewHtml = '';
-        // Show thumbnail for images, stickers, and GIFs
-        if (replyMediaUrl && (replyType === 'image' || replyType === 'sticker' || replyType === 'gif')) {
-            mediaPreviewHtml = `
-                <div class="reply-context-media-preview">
-                    <img src="${replyMediaUrl}" alt="${replyText}" class="reply-media-thumbnail" onerror="this.style.display='none'">
-                </div>
-            `;
-            console.log('Media preview HTML created for reply');
+        let displayText = replyText;
+        let isMediaReply = false;
+        
+        // Handle deleted message edge case
+        if (isReplyDeleted) {
+            displayText = 'Original message deleted';
+        } else {
+            // Show thumbnail for images, stickers, and GIFs
+            if (replyMediaUrl && (replyType === 'image' || replyType === 'sticker' || replyType === 'gif')) {
+                isMediaReply = true;
+                mediaPreviewHtml = `
+                    <div class="reply-context-media-preview reply-media-only">
+                        <img src="${replyMediaUrl}" alt="${replyText}" class="reply-media-thumbnail" onerror="this.style.display='none'">
+                    </div>
+                `;
+                console.log('Media preview HTML created for reply');
+            }
+            
+            // Add media icon indicator if replying to media
+            if (replyType === 'image' || replyType === 'video') {
+                const mediaLabel = replyType === 'image' ? 'Photo' : 'Video';
+                const mediaIcon = replyType === 'image' 
+                    ? '<svg class="reply-media-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75-3.54c-.3-.38-.77-.61-1.3-.61-.95 0-1.72.77-1.72 1.72 0 .53.23 1 .61 1.33L6 13h12.9l-4.92-6.29c-.3-.38-.77-.61-1.3-.61-.95 0-1.72.77-1.72 1.72 0 .53.23 1.01.61 1.33z"/></svg>'
+                    : '<svg class="reply-media-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+                mediaIconHtml = `<span class="reply-media-label">${mediaIcon} ${mediaLabel}</span>`;
+            }
         }
 
-        replyHtml = `
-            <div class="message-reply-context" data-reply-to="${messageData.replyTo.messageId}" role="button" tabindex="0" title="Jump to message">
-                ${mediaPreviewHtml}
-                <div class="reply-context-content">
-                    <div class="reply-context-name">${escapeHtml(replyName)}</div>
-                    <div class="reply-context-text">${escapeHtml(replyText)}</div>
+        // For media replies, only show the preview image
+        if (isMediaReply) {
+            replyHtml = `
+                <div class="reply-bubble reply-bubble-media-only" data-reply-to="${messageData.replyTo.messageId}" role="button" tabindex="0" title="Jump to message">
+                    ${mediaPreviewHtml}
                 </div>
-            </div>
-        `;
+            `;
+        } else {
+            replyHtml = `
+                <div class="reply-bubble" data-reply-to="${messageData.replyTo.messageId}" role="button" tabindex="0" title="Jump to message">
+                    ${mediaPreviewHtml}
+                    <div class="reply-bubble-content">
+                        <div class="reply-bubble-name">${escapeHtml(replyName)}</div>
+                        <div class="reply-bubble-text">${escapeHtml(displayText)}</div>
+                        ${mediaIconHtml}
+                    </div>
+                </div>
+            `;
+        }
     }
 
     const editedLabel = !isDeleted && messageData.isEdited && !isStickerOrGif ? '<span class="message-edited">(edited)</span>' : '';
@@ -1692,26 +1725,53 @@ function createMessageElement(messageData) {
     }
     // For stickers and GIFs, render with metadata wrapper
     else if (isStickerOrGif) {
-        div.innerHTML = `
-            <div class="media-message-wrapper">
-                ${optionsTrigger}
-                ${replyHtml}
-                ${content}
-                ${reactionsHtml}
-                ${statusLabel}
-            </div>
-        `;
+        if (hasReply) {
+            div.innerHTML = `
+                <div class="message-group">
+                    ${replyHtml}
+                    <div class="media-message-wrapper">
+                        ${optionsTrigger}
+                        ${content}
+                        ${reactionsHtml}
+                        ${statusLabel}
+                    </div>
+                </div>
+            `;
+        } else {
+            div.innerHTML = `
+                <div class="media-message-wrapper">
+                    ${optionsTrigger}
+                    ${content}
+                    ${reactionsHtml}
+                    ${statusLabel}
+                </div>
+            `;
+        }
     } else {
-        div.innerHTML = `
-            <div class="message-bubble">
-                ${optionsTrigger}
-                ${replyHtml}
-                ${content}
-                ${metaHtml}
-                ${reactionsHtml}
-            ${statusLabel}
-            </div>
-        `;
+        if (hasReply) {
+            div.innerHTML = `
+                <div class="message-group">
+                    ${replyHtml}
+                    <div class="message-bubble">
+                        ${optionsTrigger}
+                        ${content}
+                        ${metaHtml}
+                        ${reactionsHtml}
+                        ${statusLabel}
+                    </div>
+                </div>
+            `;
+        } else {
+            div.innerHTML = `
+                <div class="message-bubble">
+                    ${optionsTrigger}
+                    ${content}
+                    ${metaHtml}
+                    ${reactionsHtml}
+                    ${statusLabel}
+                </div>
+            `;
+        }
     }
 
     if (!isDeleted) {
@@ -1862,10 +1922,10 @@ function createMessageElement(messageData) {
             });
         }
 
-        const replyCtx = div.querySelector('.message-reply-context');
-        if (replyCtx) {
+        const replyBubble = div.querySelector('.reply-bubble');
+        if (replyBubble) {
             const jumpToSource = () => {
-                const toId = replyCtx.getAttribute('data-reply-to');
+                const toId = replyBubble.getAttribute('data-reply-to');
                 const target = document.querySelector(`.message[data-message-id="${toId}"]`);
                 if (target) {
                     // Smooth scroll to the source message
@@ -1883,10 +1943,10 @@ function createMessageElement(messageData) {
             };
 
             // Click handler
-            replyCtx.addEventListener('click', jumpToSource);
+            replyBubble.addEventListener('click', jumpToSource);
 
             // Keyboard support (Enter and Space)
-            replyCtx.addEventListener('keydown', (e) => {
+            replyBubble.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     jumpToSource();
@@ -3110,7 +3170,7 @@ function openChatSettingsModal() {
     const chatSettingsAvatar = document.getElementById('chat-settings-avatar');
     const chatSettingsProfileName = document.getElementById('chat-settings-profile-name');
     const chatSettingsProfileStatus = document.getElementById('chat-settings-profile-status');
-    
+
     if (chatSettingsAvatar) {
         chatSettingsAvatar.textContent = currentChatUser.displayName?.charAt(0).toUpperCase() || '?';
         if (currentChatUser.photoURL) {
@@ -3120,11 +3180,11 @@ function openChatSettingsModal() {
             chatSettingsAvatar.textContent = '';
         }
     }
-    
+
     if (chatSettingsProfileName) {
         chatSettingsProfileName.textContent = currentChatUser.displayName || 'User';
     }
-    
+
     if (chatSettingsProfileStatus) {
         chatSettingsProfileStatus.textContent = currentChatUser.statusMessage || 'Messenger';
     }

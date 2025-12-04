@@ -3870,14 +3870,15 @@ async function confirmClearAllChats() {
 
 function applyThemeToChat(theme) {
     const messagesContainer = document.getElementById('messages-container');
-    if (!messagesContainer) return;
+    const chatWindowContainer = document.getElementById('chat-window-container');
+    if (!messagesContainer || !chatWindowContainer) return;
 
-    // Apply background
+    // Apply background to chat window container (so it covers header and input too)
     if (theme.bgImage) {
-        messagesContainer.style.backgroundImage = `url(${theme.bgImage})`;
-        messagesContainer.style.backgroundSize = 'cover';
-        messagesContainer.style.backgroundPosition = 'center';
-        messagesContainer.style.backgroundAttachment = 'fixed';
+        chatWindowContainer.style.backgroundImage = `url(${theme.bgImage})`;
+        chatWindowContainer.style.backgroundSize = 'cover';
+        chatWindowContainer.style.backgroundPosition = 'center';
+        chatWindowContainer.style.backgroundAttachment = 'fixed';
 
         // Apply semi-transparent overlay for readability
         if (theme.bgImageOverlay) {
@@ -3885,8 +3886,9 @@ function applyThemeToChat(theme) {
             messagesContainer.style.backgroundBlendMode = 'multiply';
         }
     } else {
-        messagesContainer.style.backgroundImage = 'none';
-        messagesContainer.style.backgroundColor = theme.bgColor;
+        chatWindowContainer.style.backgroundImage = 'none';
+        chatWindowContainer.style.backgroundColor = theme.bgColor;
+        messagesContainer.style.backgroundColor = 'transparent';
         messagesContainer.style.backgroundBlendMode = 'normal';
     }
 

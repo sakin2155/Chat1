@@ -117,6 +117,7 @@ let storyProgressFillEl = null;
 let storyProgressDuration = STORY_AUTO_ADVANCE_MS;
 let gifSearchTimeout = null;
 let gifInitialLoadDone = false;
+let sentIndicatorUpdateInterval = null;
 let gifAbortController = null;
 let gifCurrentOffset = 0;
 let gifCurrentQuery = '';
@@ -1443,6 +1444,75 @@ function loadMessages() {
     }
 }
 
+/**
+ * Generates avatar HTML for a received message
+ * Shows the avatar or a placeholder depending on monologue grouping
+ */
+function getAvatarHtml(showAvatar, senderPhotoURL, senderName) {
+    if (showAvatar) {
+        // Show actual avatar
+        const initials = (senderName || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        const bgStyle = senderPhotoURL ? `background-image: url('${senderPhotoURL}');` : '';
+        return `
+            <div class="message-avatar" style="${bgStyle}">
+                ${!senderPhotoURL ? initials : ''}
+            </div>
+        `;
+    } else {
+        // Show invisible placeholder to maintain alignment
+        return `<div class="message-avatar-placeholder"></div>`;
+    }
+}
+
+/**
+ * Determines if an avatar should be shown for a received message
+ * Avatar is shown if:
+ * 1. It's the first received message in the chat
+ * 2. The sender is different from the previous message's sender (breaks monologue)
+ * 3. The previous message is from the current user (breaks monologue)
+ */
+function shouldShowAvatar(messageData) {
+    // Only show avatars for received messages
+    if (messageData.senderId === currentUser.uid) {
+        return false;
+    }
+
+    // Get all messages in the container
+    const allMessages = messagesContainer.querySelectorAll('.message');
+    if (allMessages.length === 0) {
+        return true; // First message, show avatar
+    }
+
+    // Find the previous message element
+    let previousMessageEl = null;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+        if (allMessages[i].dataset.messageId !== messageData.id) {
+            previousMessageEl = allMessages[i];
+            break;
+        }
+    }
+
+    // If no previous message, show avatar
+    if (!previousMessageEl) {
+        return true;
+    }
+
+    // Check if previous message is from the same sender
+    const previousMessageId = previousMessageEl.dataset.messageId;
+    const previousMessageEl_actual = document.querySelector(`.message[data-message-id="${previousMessageId}"]`);
+
+    // If previous message is from current user (sent), show avatar (breaks monologue)
+    if (previousMessageEl_actual?.classList.contains('sent')) {
+        return true;
+    }
+
+    // If previous message is from a different sender, show avatar
+    // We can check this by looking at the message data or by checking if it has an avatar
+    // For now, we'll assume if it's not 'sent', it's from the same sender
+    // So we return false to suppress avatar (continue monologue)
+    return false;
+}
+
 function createMessageElement(messageData) {
     const isOwnMessage = messageData.senderId === currentUser.uid;
     const isDeleted = !!messageData.isDeleted;
@@ -1457,9 +1527,17 @@ function createMessageElement(messageData) {
     const isSingleEmoji = !isDeleted && !isSystemMessage && !isGameInvite && !isWatchPartyInvite && !isVoiceMessage && !isStickerOrGif && messageData.text && isSingleEmojiString(messageData.text);
 
     const div = document.createElement('div');
-    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isImageMessage ? ' image-only' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}${isWatchPartyInvite ? ' watch-party-message' : ''}${isSingleEmoji ? ' supersized-emoji' : ''}`;
+
+    // Determine if avatar should be shown for received messages (monologue grouping)
+    const showAvatar = !isOwnMessage && !isSystemMessage && !isDeleted && shouldShowAvatar(messageData);
+
+    div.className = `message ${isOwnMessage ? 'sent' : 'received'}${isDeleted ? ' deleted' : ''}${isStickerOrGif || isVoiceMessage ? ' no-bubble' : ''}${isImageMessage ? ' image-only' : ''}${isSystemMessage ? ' system-message' : ''}${isGameInvite ? ' game-invite-message' : ''}${isWatchPartyInvite ? ' watch-party-message' : ''}${isSingleEmoji ? ' supersized-emoji' : ''}${showAvatar ? ' show-avatar' : ' hide-avatar'}`;
     div.dataset.messageId = messageData.id;
     div.dataset.messageType = messageData.type || 'text';
+    div.dataset.senderId = messageData.senderId;
+    div.dataset.seen = messageData.seen ? 'true' : 'false';
+    // Set position relative for absolute positioning of floating receipt
+    div.style.position = 'relative';
     // Store timestamp in milliseconds for proper sorting
     // Use server timestamp if available, otherwise use current time as fallback
     let timestamp = 0;
@@ -1648,7 +1726,7 @@ function createMessageElement(messageData) {
         let mediaPreviewHtml = '';
         let displayText = replyText;
         let isMediaReply = false;
-        
+
         // Handle deleted message edge case
         if (isReplyDeleted) {
             displayText = 'Original message deleted';
@@ -1663,11 +1741,11 @@ function createMessageElement(messageData) {
                 `;
                 console.log('Media preview HTML created for reply');
             }
-            
+
             // Add media icon indicator if replying to media
             if (replyType === 'image' || replyType === 'video') {
                 const mediaLabel = replyType === 'image' ? 'Photo' : 'Video';
-                const mediaIcon = replyType === 'image' 
+                const mediaIcon = replyType === 'image'
                     ? '<svg class="reply-media-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75-3.54c-.3-.38-.77-.61-1.3-.61-.95 0-1.72.77-1.72 1.72 0 .53.23 1 .61 1.33L6 13h12.9l-4.92-6.29c-.3-.38-.77-.61-1.3-.61-.95 0-1.72.77-1.72 1.72 0 .53.23 1.01.61 1.33z"/></svg>'
                     : '<svg class="reply-media-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
                 mediaIconHtml = `<span class="reply-media-label">${mediaIcon} ${mediaLabel}</span>`;
@@ -1698,9 +1776,8 @@ function createMessageElement(messageData) {
     const editedLabel = !isDeleted && messageData.isEdited && !isStickerOrGif ? '<span class="message-edited">(edited)</span>' : '';
     const metaHtml = editedLabel ? `<span class="message-meta">${editedLabel}</span>` : '';
 
-    const statusLabel = !isDeleted && isOwnMessage
-        ? `<div class="message-status">${getStatusText(messageData)}</div>`
-        : '';
+    // Status label removed - sent indicator will be positioned absolutely
+    const statusLabel = '';
 
     let reactionsHtml = '';
     if (!isDeleted && messageData.reactions && messageData.reactions.length > 0) {
@@ -1719,6 +1796,11 @@ function createMessageElement(messageData) {
         ? '<button class="message-options-trigger">⋯</button>'
         : '';
 
+    // Generate avatar HTML for received messages
+    const avatarHtml = !isOwnMessage && !isSystemMessage && !isDeleted
+        ? getAvatarHtml(showAvatar, currentChatUser?.photoURL, currentChatUser?.displayName)
+        : '';
+
     // For system messages, render as centered text
     if (isSystemMessage) {
         div.innerHTML = `<div class="system-message-content">${content}</div>`;
@@ -1726,32 +1808,110 @@ function createMessageElement(messageData) {
     // For stickers and GIFs, render with metadata wrapper
     else if (isStickerOrGif) {
         if (hasReply) {
-            div.innerHTML = `
-                <div class="message-group">
-                    ${replyHtml}
+            // Received messages with avatar, sent messages without
+            if (avatarHtml) {
+                div.innerHTML = `
+                    <div class="message-content-wrapper">
+                        ${avatarHtml}
+                        <div class="message-group">
+                            ${replyHtml}
+                            <div class="media-message-wrapper">
+                                ${optionsTrigger}
+                                ${content}
+                                ${reactionsHtml}
+                                ${statusLabel}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
+                    <div class="message-group">
+                        ${replyHtml}
+                        <div class="media-message-wrapper">
+                            ${optionsTrigger}
+                            ${content}
+                            ${reactionsHtml}
+                            ${statusLabel}
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            // Received messages with avatar, sent messages without
+            if (avatarHtml) {
+                div.innerHTML = `
+                    <div class="message-content-wrapper">
+                        ${avatarHtml}
+                        <div class="media-message-wrapper">
+                            ${optionsTrigger}
+                            ${content}
+                            ${reactionsHtml}
+                            ${statusLabel}
+                        </div>
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
                     <div class="media-message-wrapper">
                         ${optionsTrigger}
                         ${content}
                         ${reactionsHtml}
                         ${statusLabel}
                     </div>
-                </div>
-            `;
-        } else {
-            div.innerHTML = `
-                <div class="media-message-wrapper">
-                    ${optionsTrigger}
-                    ${content}
-                    ${reactionsHtml}
-                    ${statusLabel}
-                </div>
-            `;
+                `;
+            }
         }
     } else {
         if (hasReply) {
-            div.innerHTML = `
-                <div class="message-group">
-                    ${replyHtml}
+            // Received messages with avatar, sent messages without
+            if (avatarHtml) {
+                div.innerHTML = `
+                    <div class="message-content-wrapper">
+                        ${avatarHtml}
+                        <div class="message-group">
+                            ${replyHtml}
+                            <div class="message-bubble">
+                                ${optionsTrigger}
+                                ${content}
+                                ${metaHtml}
+                                ${reactionsHtml}
+                                ${statusLabel}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
+                    <div class="message-group">
+                        ${replyHtml}
+                        <div class="message-bubble">
+                            ${optionsTrigger}
+                            ${content}
+                            ${metaHtml}
+                            ${reactionsHtml}
+                            ${statusLabel}
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            // Received messages with avatar, sent messages without
+            if (avatarHtml) {
+                div.innerHTML = `
+                    <div class="message-content-wrapper">
+                        ${avatarHtml}
+                        <div class="message-bubble">
+                            ${optionsTrigger}
+                            ${content}
+                            ${metaHtml}
+                            ${reactionsHtml}
+                            ${statusLabel}
+                        </div>
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
                     <div class="message-bubble">
                         ${optionsTrigger}
                         ${content}
@@ -1759,18 +1919,8 @@ function createMessageElement(messageData) {
                         ${reactionsHtml}
                         ${statusLabel}
                     </div>
-                </div>
-            `;
-        } else {
-            div.innerHTML = `
-                <div class="message-bubble">
-                    ${optionsTrigger}
-                    ${content}
-                    ${metaHtml}
-                    ${reactionsHtml}
-                    ${statusLabel}
-                </div>
-            `;
+                `;
+            }
         }
     }
 
@@ -2193,6 +2343,9 @@ function updateMessage(messageId, messageData) {
 
     // Use requestAnimationFrame to batch DOM updates and prevent flickering
     requestAnimationFrame(() => {
+        // Update seen status dataset
+        messageEl.dataset.seen = messageData.seen ? 'true' : 'false';
+
         // Update message text if it changed
         const messageTextEl = messageEl.querySelector('.message-text');
         if (messageTextEl && messageData.text) {
@@ -2217,14 +2370,6 @@ function updateMessage(messageId, messageData) {
                 } else {
                     bubble.appendChild(editedSpan);
                 }
-            }
-        }
-
-        // Update status (for own messages)
-        if (isOwnMessage) {
-            const statusEl = messageEl.querySelector('.message-status');
-            if (statusEl) {
-                statusEl.textContent = getStatusText(messageData);
             }
         }
 
@@ -2267,21 +2412,166 @@ function removeMessage(messageId) {
 
 function updateMessageStatusVisibility() {
     const sentMessages = Array.from(messagesContainer.querySelectorAll('.message.sent'));
-    sentMessages.forEach((messageEl, index) => {
-        const statusEl = messageEl.querySelector('.message-status');
-        if (!statusEl) return;
-        if (index === sentMessages.length - 1) {
-            statusEl.classList.add('visible');
-        } else {
-            statusEl.classList.remove('visible');
+
+    // Find the last message where seen: true
+    let lastSeenMessageEl = null;
+    for (let i = sentMessages.length - 1; i >= 0; i--) {
+        const messageEl = sentMessages[i];
+        if (messageEl.dataset.seen === 'true') {
+            lastSeenMessageEl = messageEl;
+            break;
+        }
+    }
+
+    // Remove all floating receipts and sent indicators first
+    sentMessages.forEach((messageEl) => {
+        const floatingReceipt = messageEl.querySelector('.read-receipt-floating');
+        if (floatingReceipt) {
+            floatingReceipt.remove();
+        }
+        const sentIndicator = messageEl.querySelector('.sent-indicator-floating');
+        if (sentIndicator) {
+            sentIndicator.remove();
         }
     });
+
+    // Add floating receipt to the last seen message only
+    if (lastSeenMessageEl) {
+        const existingReceipt = lastSeenMessageEl.querySelector('.read-receipt-floating');
+        if (!existingReceipt) {
+            const floatingReceipt = createFloatingReceipt();
+            lastSeenMessageEl.appendChild(floatingReceipt);
+        }
+    }
+
+    // Add "Sent" indicator to the last unseen message
+    let lastUnseenMessageEl = null;
+    let lastUnseenMessageData = null;
+    for (let i = sentMessages.length - 1; i >= 0; i--) {
+        const messageEl = sentMessages[i];
+        if (messageEl.dataset.seen === 'false') {
+            lastUnseenMessageEl = messageEl;
+            // Get message data from the message element's data attributes or reconstruct it
+            lastUnseenMessageData = {
+                timestamp: {
+                    seconds: parseInt(messageEl.dataset.timestamp) / 1000
+                }
+            };
+            break;
+        }
+    }
+
+    if (lastUnseenMessageEl) {
+        const existingSentIndicator = lastUnseenMessageEl.querySelector('.sent-indicator-floating');
+        if (!existingSentIndicator) {
+            const sentIndicator = createSentIndicator(lastUnseenMessageData);
+            lastUnseenMessageEl.appendChild(sentIndicator);
+        }
+    }
+
+    // Start periodic update for sent indicators
+    startSentIndicatorUpdates();
+}
+
+function startSentIndicatorUpdates() {
+    // Clear existing interval if any
+    if (sentIndicatorUpdateInterval) {
+        clearInterval(sentIndicatorUpdateInterval);
+    }
+
+    // Update every 30 seconds to refresh the time display
+    sentIndicatorUpdateInterval = setInterval(() => {
+        const sentIndicators = document.querySelectorAll('.sent-indicator-floating');
+        sentIndicators.forEach((indicator) => {
+            const messageEl = indicator.closest('.message');
+            if (messageEl && messageEl.dataset.timestamp) {
+                const messageTime = parseInt(messageEl.dataset.timestamp);
+                const now = Date.now();
+                const elapsedMs = now - messageTime;
+                const elapsedSeconds = Math.floor(elapsedMs / 1000);
+                const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+                const elapsedHours = Math.floor(elapsedMinutes / 60);
+                const elapsedDays = Math.floor(elapsedHours / 24);
+                
+                let timeText = 'Sent';
+                if (elapsedSeconds < 60) {
+                    timeText = 'Sent now';
+                } else if (elapsedMinutes < 60) {
+                    timeText = `Sent ${elapsedMinutes}m ago`;
+                } else if (elapsedHours < 24) {
+                    timeText = `Sent ${elapsedHours}h ago`;
+                } else {
+                    timeText = `Sent ${elapsedDays}d ago`;
+                }
+                
+                indicator.textContent = timeText;
+            }
+        });
+    }, 30000); // Update every 30 seconds
+}
+
+function createFloatingReceipt() {
+    const div = document.createElement('div');
+    div.className = 'read-receipt-floating';
+    
+    if (currentChatUser?.photoURL) {
+        const img = document.createElement('img');
+        img.src = currentChatUser.photoURL;
+        img.alt = 'Seen';
+        img.className = 'read-receipt-floating-avatar';
+        img.title = 'Seen';
+        div.appendChild(img);
+    } else {
+        // Fallback to initials
+        const initialsDiv = document.createElement('div');
+        initialsDiv.className = 'read-receipt-floating-initials';
+        const initials = (currentChatUser?.displayName || 'U').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        initialsDiv.textContent = initials;
+        div.appendChild(initialsDiv);
+    }
+    
+    return div;
+}
+
+function createSentIndicator(messageData) {
+    const div = document.createElement('div');
+    div.className = 'sent-indicator-floating';
+    
+    // Get time elapsed since message was sent
+    let timeText = 'Sent';
+    if (messageData && messageData.timestamp) {
+        const messageTime = messageData.timestamp.seconds 
+            ? messageData.timestamp.seconds * 1000 
+            : messageData.timestamp instanceof Date 
+                ? messageData.timestamp.getTime()
+                : Date.now();
+        
+        const now = Date.now();
+        const elapsedMs = now - messageTime;
+        const elapsedSeconds = Math.floor(elapsedMs / 1000);
+        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+        const elapsedHours = Math.floor(elapsedMinutes / 60);
+        const elapsedDays = Math.floor(elapsedHours / 24);
+        
+        if (elapsedSeconds < 60) {
+            timeText = 'Sent now';
+        } else if (elapsedMinutes < 60) {
+            timeText = `Sent ${elapsedMinutes}m ago`;
+        } else if (elapsedHours < 24) {
+            timeText = `Sent ${elapsedHours}h ago`;
+        } else {
+            timeText = `Sent ${elapsedDays}d ago`;
+        }
+    }
+    
+    div.textContent = timeText;
+    return div;
 }
 
 function getStatusText(messageData) {
-    const baseStatus = messageData.seen ? 'Seen' : 'Sent';
-    const timeLabel = formatTime(messageData.timestamp);
-    return timeLabel ? `${baseStatus} • ${timeLabel}` : baseStatus;
+    // Return only checkmark for unsent messages
+    // Floating receipt is handled separately via updateMessageStatusVisibility
+    return `<div class="message-status-sent">✓</div>`;
 }
 
 function getDisplayStatus(userData) {

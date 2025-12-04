@@ -2765,9 +2765,10 @@ body {
 
 .message {
     display: flex;
-    margin-bottom: 8px;
+    margin-bottom: 28px;
     animation: slideIn 0.3s ease-out;
     position: relative;
+    overflow: visible;
     /* Smooth height transitions for typing indicator removal */
     transition: opacity 0.2s ease-out, transform 0.2s ease-out, margin 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     touch-action: pan-y;
@@ -2890,6 +2891,61 @@ body {
     will-change: box-shadow;
     animation: messageBounce 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     touch-action: pan-y;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Message Content Wrapper - Contains avatar and bubble */
+.message-content-wrapper {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.message.received .message-content-wrapper {
+    justify-content: flex-start;
+}
+
+.message.sent .message-content-wrapper {
+    justify-content: flex-end;
+}
+
+/* Avatar Styling */
+.message-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: var(--sidebar-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    overflow: hidden;
+    animation: messageBounce 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Avatar Placeholder - Maintains alignment when avatar is hidden */
+.message-avatar-placeholder {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    visibility: hidden;
+}
+
+/* Monologue Grouping - Adjust corner radius for consecutive messages */
+/* For messages in a monologue (hide-avatar class), flatten top corners */
+.message.received.hide-avatar .message-bubble {
+    border-top-left-radius: 8px;
+}
+
+.message.sent.hide-avatar .message-bubble {
+    border-top-right-radius: 8px;
 }
 
 @keyframes messageBounce {
@@ -2912,7 +2968,7 @@ body {
     .message-bubble {
         max-width: 85%;
     }
-    
+
     .message-group .message-bubble {
         width: fit-content;
         max-width: 85%;
@@ -2920,33 +2976,48 @@ body {
         word-break: break-word;
         overflow-wrap: break-word;
     }
-    
+
+    .message-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 10px;
+    }
+
+    .message-avatar-placeholder {
+        width: 28px;
+        height: 28px;
+    }
+
+    .message-content-wrapper {
+        gap: 6px;
+    }
+
     .reply-bubble {
         max-width: 85%;
         padding: 8px 10px;
     }
-    
+
     .reply-bubble.reply-bubble-media-only {
         padding: 0;
     }
-    
+
     .reply-context-media-preview.reply-media-only {
         width: 100px;
         height: 100px;
         border-radius: 12px;
         flex-shrink: 0;
     }
-    
+
     .reply-bubble-text {
         font-size: 12px;
         max-width: 160px;
     }
-    
+
     .reply-bubble-name {
         font-size: 10px;
         max-width: 160px;
     }
-    
+
     .reply-bubble-content {
         gap: 1px;
     }
@@ -2955,7 +3026,11 @@ body {
 .message.sent .message-bubble {
     background: var(--message-sent);
     color: var(--text-white);
-    border-bottom-right-radius: 4px;
+    border-radius: 18px 4px 4px 18px;
+}
+
+.message.sent.hide-avatar .message-bubble {
+    border-top-right-radius: 18px;
 }
 
 .message.received .message-bubble {
@@ -3229,10 +3304,97 @@ body {
     margin-top: 4px;
     text-align: right;
     display: none;
+    align-self: flex-end;
+    white-space: nowrap;
 }
 
 .message-status.visible {
-    display: block;
+    display: inline-block;
+}
+
+/* Messenger Avatar Read Receipt */
+.message-read-receipt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+}
+
+.read-receipt-avatar {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid white;
+    object-fit: cover;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.read-receipt-avatar-initials {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid white;
+    background: var(--sidebar-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.message-status-sent {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 2px;
+}
+
+/* Floating Read Receipt - Absolute Positioned */
+.read-receipt-floating {
+    position: absolute;
+    bottom: -22px;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.read-receipt-floating-avatar {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid white;
+    object-fit: cover;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.read-receipt-floating-initials {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid white;
+    background: var(--sidebar-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Sent Indicator - Absolute Positioned */
+.sent-indicator-floating {
+    position: absolute;
+    bottom: -22px;
+    right: 0;
+    z-index: 10;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    transition: all 0.2s ease;
 }
 
 /* Reactions Display */
@@ -3375,7 +3537,7 @@ body {
     border-top: 1px solid var(--border-color);
     display: flex;
     gap: 8px;
-    align-items: flex-end;
+    align-items: center;
     position: relative;
     overflow: visible;
     flex-shrink: 0;
@@ -3571,17 +3733,25 @@ body {
 }
 
 .send-btn {
-    padding: 10px 20px;
-    background: var(--message-sent);
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    background: rgba(var(--message-sent-rgb, 31, 104, 217), 0.5);
     border: none;
     color: white;
-    border-radius: 24px;
+    border-radius: 50%;
     cursor: pointer;
     font-size: 15px;
     font-weight: 600;
     transition: opacity 0.2s;
     flex-shrink: 0;
-    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Frosted glass effect */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     /* Prevent focus outline on mobile */
     outline: none;
 }
@@ -3593,6 +3763,8 @@ body {
 /* Mobile: prevent send button from stealing focus */
 @media (max-width: 768px) {
     .send-btn {
+        width: 38px;
+        height: 38px;
         /* Prevent focus ring */
         -webkit-tap-highlight-color: transparent;
         /* Don't allow focus */
@@ -5586,6 +5758,22 @@ video.story-viewer-media {
     align-items: flex-start;
 }
 
+/* Message Group inside Content Wrapper - Aligns with avatar */
+.message-content-wrapper .message-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.message.received .message-content-wrapper .message-group {
+    align-items: flex-start;
+}
+
+.message.sent .message-content-wrapper .message-group {
+    align-items: flex-end;
+}
+
 /* Reply Bubble - Top part of stacked message */
 .reply-bubble {
     display: flex;
@@ -5596,7 +5784,7 @@ video.story-viewer-media {
     transition: all 0.2s ease;
     user-select: none;
     -webkit-user-select: none;
-    min-width: 0;
+    min-width: 150px;
     overflow: hidden;
     max-width: 70%;
 }
@@ -5756,23 +5944,24 @@ video.story-viewer-media {
         height: 40px;
         border-radius: 8px;
     }
-    
+
     .reply-context-media-preview.reply-media-only {
         width: 110px;
         height: 110px;
         border-radius: 12px;
         flex-shrink: 0;
     }
-    
+
     .reply-bubble {
         padding: 8px 10px;
+        min-width: 130px;
     }
-    
+
     .reply-bubble-text {
         font-size: 12px;
         max-width: 180px;
     }
-    
+
     .reply-bubble-name {
         font-size: 10px;
         max-width: 180px;

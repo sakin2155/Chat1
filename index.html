@@ -109,7 +109,8 @@
                         <div class="current-user-email" id="current-user-email"></div>
                         <div class="current-user-tagline" id="current-user-tagline">Add a status</div>
                     </div>
-                    <button id="edit-profile-btn" class="profile-edit-btn">Edit</button>
+                    <button id="edit-profile-btn" class="profile-edit-btn"><img src="images/icons/pencil.png"
+                            alt="Edit"></button>
                 </div>
                 <div class="story-strip" id="story-strip">
                     <button class="story-card add" id="add-story-btn">
@@ -157,7 +158,8 @@
             <!-- Chat Window -->
             <div class="chat-window-container" id="chat-window-container">
                 <div class="chat-window-header">
-                    <button id="back-to-users" class="back-btn">←</button>
+                    <button id="back-to-users" class="back-btn"><img src="images/icons/left-arrow.png"
+                            alt="Back"></button>
                     <div class="chat-user-info">
                         <div id="chat-user-avatar" class="chat-avatar">?</div>
                         <div>
@@ -169,7 +171,8 @@
                         <span class="streak-icon">🔥</span>
                         <span id="streak-count" class="streak-count">0</span>
                     </div>
-                    <button id="chat-settings-btn" class="chat-settings-btn" title="Chat Settings">⚙️</button>
+                    <button id="chat-settings-btn" class="chat-settings-btn" title="Chat Settings"><img
+                            src="images/icons/edit.png" alt="Settings"></button>
                 </div>
 
                 <div class="messages-container" id="messages-container">
@@ -184,6 +187,11 @@
                     </div>
                 </div>
 
+                <!-- Sticker Recommendations (Above Reply Preview) -->
+                <div id="sticker-recommendation-container" class="sticker-recommendation-container hidden">
+                    <!-- Recommended stickers will be injected here -->
+                </div>
+
                 <!-- Reply Preview Bar (Hidden by Default) -->
                 <div id="reply-preview" class="reply-preview hidden">
                     <div class="reply-preview-content">
@@ -194,6 +202,8 @@
                         <div class="reply-preview-text"></div>
                     </div>
                 </div>
+
+
 
                 <div class="message-input-container">
                     <button id="media-menu-btn" class="icon-btn" title="Add media">

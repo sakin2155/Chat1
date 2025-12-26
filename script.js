@@ -68,6 +68,22 @@ const GIPHY_RESULT_LIMIT = 28;
 const CUSTOM_STICKERS_KEY_PREFIX = 'chat-custom-stickers';
 const DEFAULT_STICKER_EMOJIS = ['😀', '😂', '😍', '😎', '🤯', '😭', '🙌', '🔥', '👍', '🎉', '💀', '🤩'];
 
+// Smart Sticker Recommendations
+const STICKER_KEYWORDS = {
+    'love': ['😍', '❤️'],
+    'lol': ['😂', '💀'],
+    'haha': ['😂', '💀'],
+    'cool': ['😎', '👍'],
+    'wow': ['🤯', '🤩'],
+    'sad': ['😭'],
+    'fire': ['🔥'],
+    'lit': ['🔥'],
+    'yes': ['👍', '🙌'],
+    'yay': ['🎉', '🙌'],
+    'dead': ['💀'],
+    'star': ['🤩']
+};
+
 // Admin stickers and backgrounds
 let adminStickers = [];
 let adminBackgrounds = [];
@@ -2492,7 +2508,7 @@ function startSentIndicatorUpdates() {
                 const elapsedMinutes = Math.floor(elapsedSeconds / 60);
                 const elapsedHours = Math.floor(elapsedMinutes / 60);
                 const elapsedDays = Math.floor(elapsedHours / 24);
-                
+
                 let timeText = 'Sent';
                 if (elapsedSeconds < 60) {
                     timeText = 'Sent now';
@@ -2503,7 +2519,7 @@ function startSentIndicatorUpdates() {
                 } else {
                     timeText = `Sent ${elapsedDays}d ago`;
                 }
-                
+
                 indicator.textContent = timeText;
             }
         });
@@ -2513,7 +2529,7 @@ function startSentIndicatorUpdates() {
 function createFloatingReceipt() {
     const div = document.createElement('div');
     div.className = 'read-receipt-floating';
-    
+
     if (currentChatUser?.photoURL) {
         const img = document.createElement('img');
         img.src = currentChatUser.photoURL;
@@ -2529,30 +2545,30 @@ function createFloatingReceipt() {
         initialsDiv.textContent = initials;
         div.appendChild(initialsDiv);
     }
-    
+
     return div;
 }
 
 function createSentIndicator(messageData) {
     const div = document.createElement('div');
     div.className = 'sent-indicator-floating';
-    
+
     // Get time elapsed since message was sent
     let timeText = 'Sent';
     if (messageData && messageData.timestamp) {
-        const messageTime = messageData.timestamp.seconds 
-            ? messageData.timestamp.seconds * 1000 
-            : messageData.timestamp instanceof Date 
+        const messageTime = messageData.timestamp.seconds
+            ? messageData.timestamp.seconds * 1000
+            : messageData.timestamp instanceof Date
                 ? messageData.timestamp.getTime()
                 : Date.now();
-        
+
         const now = Date.now();
         const elapsedMs = now - messageTime;
         const elapsedSeconds = Math.floor(elapsedMs / 1000);
         const elapsedMinutes = Math.floor(elapsedSeconds / 60);
         const elapsedHours = Math.floor(elapsedMinutes / 60);
         const elapsedDays = Math.floor(elapsedHours / 24);
-        
+
         if (elapsedSeconds < 60) {
             timeText = 'Sent now';
         } else if (elapsedMinutes < 60) {
@@ -2563,7 +2579,7 @@ function createSentIndicator(messageData) {
             timeText = `Sent ${elapsedDays}d ago`;
         }
     }
-    
+
     div.textContent = timeText;
     return div;
 }
@@ -4343,6 +4359,7 @@ async function sendMessage() {
     // Clear input immediately for instant feedback
     messageInput.value = '';
     messageInput.style.height = 'auto';
+    hideStickerRecommendations();
 
     try {
         // Check if we're editing a message
@@ -5603,6 +5620,9 @@ messageInput.addEventListener('input', () => {
     messageInput.style.height = Math.min(messageInput.scrollHeight, 150) + 'px';
     updateTypingStatus(true);
 
+    // Smart Sticker Recommendations
+    checkStickerKeywords(messageInput.value);
+
     clearTimeout(typingTimeout);
     typingTimeout = setTimeout(() => {
         updateTypingStatus(false);
@@ -5922,6 +5942,133 @@ document.addEventListener('touchstart', (e) => {
         }
     }
 }, true);
+
+
+// ===========================
+// Smart Sticker Recommendations (Tenor API)
+// ===========================
+const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Google Cloud Tenor API Key
+const TENOR_CLIENT_KEY = 'sticker_recommendations';
+let stickerRecommendationTimeout = null;
+let lastStickerQuery = '';
+
+function checkStickerKeywords(text) {
+    if (!text || text.length < 2) {
+        hideStickerRecommendations();
+        return;
+    }
+
+    // Get the last word being typed
+    const words = text.trim().split(/\s+/);
+    if (!words.length) return;
+
+    const lastWord = words[words.length - 1].toLowerCase().replace(/[^a-z]/g, '');
+
+    // Minimum 2 characters to trigger, max 10 characters
+    if (lastWord.length < 2 || lastWord.length > 10) {
+        hideStickerRecommendations();
+        return;
+    }
+
+    // Debounce API calls
+    if (stickerRecommendationTimeout) {
+        clearTimeout(stickerRecommendationTimeout);
+    }
+
+    // Skip if same query
+    if (lastWord === lastStickerQuery) return;
+
+    stickerRecommendationTimeout = setTimeout(() => {
+        fetchTenorStickers(lastWord);
+    }, 1500);
+}
+
+async function fetchTenorStickers(query) {
+    if (!query || query.length < 2 || query.length > 10) return;
+
+    lastStickerQuery = query;
+
+    try {
+        const params = new URLSearchParams({
+            key: TENOR_API_KEY,
+            client_key: TENOR_CLIENT_KEY,
+            q: query,
+            limit: '20',
+            media_filter: 'tinygif,gif'
+        });
+
+        const response = await fetch(`https://tenor.googleapis.com/v2/search?${params.toString()}`);
+
+        if (!response.ok) {
+            console.warn('Tenor API error:', response.status);
+            return;
+        }
+
+        const data = await response.json();
+
+        if (!data.results || data.results.length === 0) {
+            hideStickerRecommendations();
+            return;
+        }
+
+        const stickers = data.results.map((result, index) => ({
+            id: result.id || `tenor-${index}`,
+            url: result.media_formats?.tinygif?.url || result.media_formats?.gif?.url,
+            sendUrl: result.media_formats?.gif?.url || result.media_formats?.tinygif?.url,
+            alt: result.content_description || query
+        })).filter(s => s.url);
+
+        if (stickers.length > 0) {
+            renderStickerRecommendations(stickers);
+        } else {
+            hideStickerRecommendations();
+        }
+    } catch (error) {
+        console.error('Error fetching Tenor stickers:', error);
+        hideStickerRecommendations();
+    }
+}
+
+function renderStickerRecommendations(stickers) {
+    const container = document.getElementById('sticker-recommendation-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+    stickers.forEach(sticker => {
+        const div = document.createElement('div');
+        div.className = 'recommended-sticker';
+        const img = document.createElement('img');
+        img.src = sticker.url;
+        img.alt = sticker.alt || 'Sticker';
+        img.loading = 'lazy';
+        div.appendChild(img);
+
+        div.addEventListener('click', () => {
+            console.log('Sending recommended sticker:', sticker.sendUrl);
+            handleStickerSelect(sticker.sendUrl);
+            hideStickerRecommendations();
+            lastStickerQuery = '';
+        });
+
+        container.appendChild(div);
+    });
+
+    container.classList.remove('hidden');
+}
+
+function hideStickerRecommendations() {
+    // Cancel any pending fetch
+    if (stickerRecommendationTimeout) {
+        clearTimeout(stickerRecommendationTimeout);
+        stickerRecommendationTimeout = null;
+    }
+    const container = document.getElementById('sticker-recommendation-container');
+    if (container) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+    }
+    lastStickerQuery = '';
+}
 
 
 

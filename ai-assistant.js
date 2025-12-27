@@ -4,9 +4,9 @@
 
 // OpenRouter API Configuration
 // Get your free API key from: https://openrouter.ai/keys
-const OPENROUTER_API_KEY = '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';
+const OPENROUTER_API_KEY = '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';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const AI_MODEL = 'google/gemini-2.0-flash-exp:free'; // Using Google Gemini 2.0 Flash (Free) via OpenRouter
+const AI_MODEL = 'qwen/qwen3-coder:free';
 
 // DOM Elements
 const messagesContainer = document.getElementById('ai-messages-container');

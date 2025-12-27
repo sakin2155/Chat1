@@ -3501,6 +3501,8 @@ body {
     -webkit-user-select: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     animation: typingBounce 0.6s ease-in-out infinite;
+    /* Left margin to align with received messages (avatar width 32px + gap 8px) */
+    margin-left: 40px;
 }
 
 .typing-dots span {

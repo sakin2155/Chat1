@@ -2311,12 +2311,6 @@ function appendMessage(messageData) {
             messagesContainer.appendChild(messageEl);
         }
 
-        // Ensure typing indicator stays at the bottom after new message is added
-        const typingIndicatorEl = messagesContainer.querySelector('.message.typing-indicator-message');
-        if (typingIndicatorEl) {
-            messagesContainer.appendChild(typingIndicatorEl);
-        }
-
         updateMessageStatusVisibility();
         // Auto-scroll to bottom when new message is added
         scrollToBottom(true);
@@ -5666,10 +5660,12 @@ function listenForTyping() {
                 const div = document.createElement('div');
                 div.className = 'message received typing-indicator-message';
                 div.innerHTML = `
-                    <div class="typing-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
+                    <div class="message-bubble typing">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
                     </div>
                 `;
                 messagesContainer.appendChild(div);

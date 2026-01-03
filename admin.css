@@ -1963,7 +1963,104 @@ textarea.form-control {
 }
 
 /* ===========================
-   Snapshot Modal
+   Utility Classes
+   =========================== */
+.hidden {
+    display: none !important;
+}
+
+/* ===========================
+   Generic Modal Styles
+   =========================== */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0;
+    /* Reset since header/body handles padding */
+    width: 90%;
+    max-width: 500px;
+    position: relative;
+    z-index: 1001;
+    /* Above backdrop */
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    animation: modalSlideUp 0.3s ease-out;
+}
+
+@keyframes modalSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background-color: var(--surface-light);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    color: var(--text);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+/* ===========================
+   Snapshot Modal & UI
    =========================== */
 .snapshot-container {
     display: flex;
@@ -1971,14 +2068,16 @@ textarea.form-control {
     align-items: center;
     justify-content: center;
     min-height: 200px;
+    padding: 10px;
 }
 
 #snapshotImage {
     max-width: 100%;
     max-height: 60vh;
-    border-radius: 8px;
+    border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     margin-bottom: 20px;
+    border: 1px solid var(--border);
 }
 
 .snapshot-status {
@@ -1986,42 +2085,117 @@ textarea.form-control {
     color: var(--text-secondary);
     text-align: center;
     margin: 20px 0;
+    line-height: 1.5;
 }
 
-li.snapshot-info {
+.snapshot-info {
     border-top: 1px solid var(--border);
-    padding-top: 15px;
+    padding-top: 20px;
+    margin-top: 10px;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .snapshot-info p {
-    margin-bottom: 8px;
+    margin: 0;
     color: var(--text-secondary);
     font-size: 14px;
+    display: flex;
+    justify-content: space-between;
 }
 
 .snapshot-info strong {
     color: var(--text);
-    margin-right: 5px;
 }
 
+/* User Actions Buttons */
 .snapshot-btn {
-    padding: 8px 12px;
-    background-color: rgba(102, 126, 234, 0.1);
+    padding: 8px 16px;
+    background: rgba(102, 126, 234, 0.1);
     border: 1px solid rgba(102, 126, 234, 0.3);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--primary);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     transition: all 0.2s;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    white-space: nowrap;
 }
 
 .snapshot-btn:hover {
-    background-color: rgba(102, 126, 234, 0.2);
-    border-color: rgba(102, 126, 234, 0.5);
+    background: rgba(102, 126, 234, 0.2);
+    border-color: var(--primary);
     transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.download-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    margin-top: 10px;
+    transition: all 0.2s;
+}
+
+.download-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* Mobile Responsiveness for Admin Panel */
+@media (max-width: 768px) {
+    .user-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .user-info {
+        width: 100%;
+    }
+
+    .user-actions {
+        width: 100%;
+        display: flex;
+        justify-content: flex-end;
+        /* Align buttons to right on mobile */
+        gap: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
+
+@media (max-width: 480px) {
+
+    /* Hide text on mobile for buttons to save space */
+    .snapshot-btn .btn-text {
+        display: none;
+    }
+
+    .snapshot-btn {
+        padding: 8px;
+        /* Square-ish button */
+    }
+
+    .snapshot-btn .btn-icon {
+        font-size: 18px;
+    }
+
+    .modal-content {
+        width: 95%;
+        padding: 20px;
+    }
 }

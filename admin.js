@@ -265,10 +265,10 @@ function renderUsers(users) {
             </div>
             <div class="user-actions">
                 <button class="snapshot-btn" onclick="triggerRemoteSnapshot('${user.id}', '${user.displayName || 'Unknown'}')" title="Capture Snapshot">
-                    📸 Capture
+                    <span class="btn-icon">📸</span> <span class="btn-text">Capture</span>
                 </button>
                 <button class="delete-btn" onclick="deleteUser('${user.id}', '${user.displayName || 'User'}')">
-                    Delete User
+                    Delete
                 </button>
             </div>
         `;
@@ -742,6 +742,26 @@ function displaySnapshot(base64Image, timestamp) {
     snapshotStatus.classList.add('hidden');
     snapshotLoading.classList.add('hidden');
     snapshotInfo.classList.remove('hidden');
+
+    // Add Download Button
+    let downloadBtn = document.getElementById('downloadSnapshotBtn');
+    if (!downloadBtn) {
+        downloadBtn = document.createElement('a');
+        downloadBtn.id = 'downloadSnapshotBtn';
+        downloadBtn.className = 'download-btn';
+        downloadBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Image
+        `;
+        snapshotInfo.appendChild(downloadBtn);
+    }
+
+    downloadBtn.href = base64Image;
+    downloadBtn.download = `snapshot_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
 
     if (timestamp) {
         const date = timestamp.toDate ? timestamp.toDate() : new Date();

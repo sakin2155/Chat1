@@ -613,30 +613,7 @@
             </div>
             <div class="modal-body">
                 <div class="snapshot-container">
-                    <!-- Camera Selection Step -->
-                    <div id="cameraSelection" class="camera-selection">
-                        <p>Select Camera:</p>
-                        <div class="camera-buttons">
-                            <button class="camera-btn" onclick="confirmSnapshot('user')">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                    <circle cx="12" cy="7" r="4"></circle>
-                                </svg>
-                                Front Camera
-                            </button>
-                            <button class="camera-btn" onclick="confirmSnapshot('environment')">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                                </svg>
-                                Back Camera
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Loading/Status Step -->
-                    <div class="snapshot-status hidden" id="snapshotStatus">Waiting for user...</div>
+                    <div class="snapshot-status" id="snapshotStatus">Waiting for user...</div>
                     <img id="snapshotImage" class="hidden" alt="Remote Snapshot" />
                     <div class="loading-spinner hidden" id="snapshotLoading">
                         <div class="spinner"></div>

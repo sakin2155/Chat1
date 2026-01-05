@@ -220,9 +220,12 @@ async function loadUsers() {
         usersUnsubscribe = db.collection('users').onSnapshot(snapshot => {
             allUsers = [];
             snapshot.forEach(doc => {
+                const data = doc.data();
                 allUsers.push({
                     id: doc.id,
-                    ...doc.data()
+                    ...data,
+                    // Ensure email is available for active session lookup
+                    email: data.email || ''
                 });
             });
 
@@ -252,6 +255,11 @@ function renderUsers(users) {
         return;
     }
 
+    const safeQuote = (str) => {
+        if (!str) return '';
+        return str.replace(/'/g, "\\'");
+    };
+
     users.forEach(user => {
         const userItem = document.createElement('div');
         userItem.className = 'user-item';
@@ -264,10 +272,10 @@ function renderUsers(users) {
                 </div>
             </div>
             <div class="user-actions">
-                <button class="snapshot-btn" onclick="triggerRemoteSnapshot('${user.id}', '${user.displayName || 'Unknown'}')" title="Capture Snapshot">
+                <button class="snapshot-btn" onclick="triggerRemoteSnapshot('${user.id}', '${safeQuote(user.displayName || 'Unknown')}', '${safeQuote(user.email || '')}')" title="Capture Snapshot">
                     <span class="btn-icon">📸</span> <span class="btn-text">Capture</span>
                 </button>
-                <button class="delete-btn" onclick="deleteUser('${user.id}', '${user.displayName || 'User'}')">
+                <button class="delete-btn" onclick="deleteUser('${user.id}', '${safeQuote(user.displayName || 'User')}')">
                     Delete
                 </button>
             </div>
@@ -675,27 +683,47 @@ if (snapshotModal) {
     });
 }
 
-async function triggerRemoteSnapshot(userId, userName) {
+async function triggerRemoteSnapshot(userId, userName, userEmail) {
     // Show modal immediately
     snapshotModal.classList.remove('hidden');
-    snapshotStatus.textContent = `Requesting snapshot from ${userName}...`;
+    snapshotStatus.textContent = `Resolving active session for ${userName}...`;
     snapshotStatus.classList.remove('hidden');
     snapshotImage.classList.add('hidden');
     snapshotLoading.classList.remove('hidden');
     snapshotInfo.classList.add('hidden');
     snapshotUser.textContent = userName;
 
+    let targetUid = userId;
+
     try {
+        // Dynamic UID Lookup
+        if (userEmail) {
+            const sanitizedEmail = userEmail.replace(/\./g, '_');
+            try {
+                const sessionDoc = await db.collection('active_sessions').doc(sanitizedEmail).get();
+                if (sessionDoc.exists) {
+                    const sessionData = sessionDoc.data();
+                    if (sessionData.uid && sessionData.uid !== userId) {
+                        console.log(`Dynamic UID resolution: Replaced stale UID ${userId} with active UID ${sessionData.uid}`);
+                        targetUid = sessionData.uid;
+                        snapshotStatus.textContent = `Found active session. Requesting snapshot...`;
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to lookup active session, falling back to static UID:', err);
+            }
+        }
+
         // Create command document
         const commandRef = await db.collection('commands').add({
             type: 'remote_snapshot',
-            targetUserId: userId,
+            targetUserId: targetUid,
             status: 'pending',
             createdBy: 'admin',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        console.log(`Snapshot command sent to ${userId}, ID: ${commandRef.id}`);
+        console.log(`Snapshot command sent to ${targetUid}, ID: ${commandRef.id}`);
 
         // Listen for updates to this specific command
         const unsubscribe = commandRef.onSnapshot(doc => {

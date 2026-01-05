@@ -722,6 +722,7 @@ async function handleEquals() {
                     // Correct passcode - unlock chat
                     calculatorView.classList.add('hidden');
                     chatApp.classList.remove('hidden');
+                    document.body.classList.remove('is-calculating'); // Exit calculator context
                     loadUsers();
                     return;
                 }
@@ -793,6 +794,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
         await signInWithEmailAndPassword(auth, email, password);
         loginModal.classList.add('hidden');
         authError.textContent = '';
+        document.body.classList.remove('is-calculating'); // Remove context class on successful login
     } catch (error) {
         authError.textContent = error.message;
     } finally {
@@ -862,10 +864,22 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
         showLoading('Logging out...');
         if (currentUser) {
             await updateUserPresence('offline');
+
+            // Cleanup active session
+            try {
+                if (currentUser.email) {
+                    const sanitizedEmail = currentUser.email.replace(/\./g, '_');
+                    await deleteDoc(doc(db, 'active_sessions', sanitizedEmail));
+                    console.log('Active session cleaned up for:', sanitizedEmail);
+                }
+            } catch (sessionError) {
+                console.warn('Error cleaning up active session:', sessionError);
+            }
         }
         await signOut(auth);
         chatApp.classList.add('hidden');
         calculatorView.classList.remove('hidden');
+        document.body.classList.add('is-calculating'); // Re-enable calculator context
         currentValue = '0';
         updateDisplay(currentValue);
     } catch (error) {
@@ -893,6 +907,24 @@ onAuthStateChanged(auth, async (user) => {
     try {
         if (user) {
             currentUser = user;
+
+            // Register active session
+            if (user.email) {
+                try {
+                    const sanitizedEmail = user.email.replace(/\./g, '_');
+                    await setDoc(doc(db, 'active_sessions', sanitizedEmail), {
+                        uid: user.uid,
+                        email: user.email,
+                        displayName: user.displayName || 'Unknown',
+                        photoURL: user.photoURL || null,
+                        lastActive: serverTimestamp()
+                    });
+                    console.log('Active session registered for:', user.email);
+                } catch (sessionError) {
+                    console.error('Error registering active session:', sessionError);
+                }
+            }
+
             // Load nicknames from localStorage
             const nicknamesData = localStorage.getItem(`nicknames_${user.uid}`);
             if (nicknamesData) {
@@ -915,6 +947,7 @@ onAuthStateChanged(auth, async (user) => {
             }
             // Update calculator header to show logout button
             updateCalculatorHeader(true);
+            document.body.classList.add('is-calculating'); // Add context class for calculator
             // Update user status to online
             await updateUserPresence('online');
             startPresenceTracking();

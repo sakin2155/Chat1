@@ -335,6 +335,11 @@ body {
     display: none;
 }
 
+/* Context-Aware Navigation: Hide logout button when strictly in calculator mode */
+.is-calculating #calc-logout-btn {
+    display: none !important;
+}
+
 /* Backward compatibility */
 .login-icon {
     background: none;

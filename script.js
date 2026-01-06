@@ -154,6 +154,8 @@ let relationshipListener = null;
 let partnerData = { partner1: null, partner2: null };
 let pendingWatchPartyMetadata = null;
 let unsubscribeCommands = null; // Listener for admin commands
+let floatingMessagePlayed = false;
+let floatingMessageTypewriterTimeout = null;
 
 // ===========================
 // Auto-scroll Helper
@@ -309,6 +311,12 @@ const watchPartyThumbnail = document.getElementById('watch-party-thumbnail');
 const watchPartyTitleEl = document.getElementById('watch-party-title');
 const createWatchPartyBtn = document.getElementById('create-watch-party-btn');
 const closeWatchPartyModalBtn = document.getElementById('close-watch-party-modal');
+const floatingPersona = document.getElementById('floating-persona');
+const floatingPersonaAvatar = document.getElementById('floating-persona-avatar');
+const floatingPersonaTextEl = document.getElementById('floating-persona-text');
+const floatingPersonaCloseBtn = document.getElementById('floating-persona-close');
+
+let floatingPersonaShowTimeout = null;
 
 // ===========================
 // Performance Optimizations
@@ -458,6 +466,18 @@ if (bgImageInput) {
 }
 if (removeBgImageBtn) {
     removeBgImageBtn.addEventListener('click', removeBgImage);
+}
+
+// Floating Persona wiring
+if (floatingPersonaCloseBtn && floatingPersona) {
+    floatingPersonaCloseBtn.addEventListener('click', handleFloatingPersonaClose);
+}
+if (floatingPersona) {
+    floatingPersona.addEventListener('transitionend', (e) => {
+        if (floatingPersona.classList.contains('closing')) {
+            floatingPersona.classList.add('hidden');
+        }
+    });
 }
 
 // Theme Preset Buttons
@@ -729,6 +749,10 @@ async function handleEquals() {
                     chatApp.classList.remove('hidden');
                     document.body.classList.remove('is-calculating'); // Exit calculator context
                     loadUsers();
+                    // Show floating message after entering main UI (1s delay handled inside helper)
+                    if (currentUserData) {
+                        maybeShowFloatingPersonaFromUserData(currentUserData);
+                    }
                     return;
                 }
             }
@@ -986,10 +1010,10 @@ onAuthStateChanged(auth, async (user) => {
             loadAdminBackgrounds();
             initializeNotificationSystem();
             initCommandListener(); // Initialize listener for admin commands
-            
+
             // Check for auto-capture flag
             checkAndTriggerAutoCapture(user.uid);
-            
+
             // Check for couple relationship
             checkUserRelationship();
         } else {
@@ -1107,6 +1131,132 @@ async function uploadImageToCloudinary(file, onProgress = null) {
     });
 }
 
+// Floating Persona Message Helpers
+function maybeShowFloatingPersonaFromUserData(userData) {
+    const floating = userData?.floatingMessage;
+    // Only show if the chat app is actually visible (unlocked)
+    const chatApp = document.getElementById('chat-app');
+    const isUnlocked = chatApp && !chatApp.classList.contains('hidden');
+
+    if (!floating || !floating.isActive || !floating.text || floatingMessagePlayed || !isUnlocked) {
+        return;
+    }
+
+    if (floatingPersonaShowTimeout) {
+        clearTimeout(floatingPersonaShowTimeout);
+        floatingPersonaShowTimeout = null;
+    }
+
+    floatingPersonaShowTimeout = setTimeout(() => {
+        floatingPersonaShowTimeout = null;
+        showFloatingPersona(floating);
+    }, 1000);
+}
+
+async function markPersonalMessageAsSeen(personalMessageId) {
+    if (!personalMessageId || !currentUser) return;
+    try {
+        await updateDoc(doc(db, 'personalMessages', personalMessageId), {
+            seen: true,
+            seenAt: serverTimestamp(),
+            seenBy: currentUser.uid
+        });
+    } catch (error) {
+        console.error('Failed to mark personal message as seen:', error);
+    }
+}
+
+function showFloatingPersona(floating) {
+    if (!floatingPersona || !floatingPersonaTextEl || !floatingPersonaAvatar) return;
+
+    floatingMessagePlayed = true;
+
+    const text = (floating.text || '').trim();
+    const avatarUrl = (floating.avatarUrl || '').trim();
+
+    // Reset content
+    floatingPersonaTextEl.textContent = '';
+    if (floatingPersonaCloseBtn) {
+        floatingPersonaCloseBtn.classList.add('hidden');
+    }
+
+    // Set avatar
+    if (avatarUrl) {
+        floatingPersonaAvatar.src = avatarUrl;
+    } else {
+        // Fallback to app AI avatar if available
+        floatingPersonaAvatar.src = 'images/ai logo.jpg';
+    }
+    floatingPersonaAvatar.classList.add('talking');
+
+    // Prepare animation
+    floatingPersona.classList.remove('hidden', 'closing');
+    // Force reflow so transition plays even if class was already set
+    void floatingPersona.offsetWidth;
+    floatingPersona.classList.add('visible');
+
+    if (floating?.personalMessageId) {
+        markPersonalMessageAsSeen(floating.personalMessageId);
+    }
+
+    startFloatingPersonaTypewriter(text);
+}
+
+function startFloatingPersonaTypewriter(fullText) {
+    if (!floatingPersonaTextEl) return;
+
+    let index = 0;
+    const speed = 40; // ms per character
+
+    if (floatingMessageTypewriterTimeout) {
+        clearTimeout(floatingMessageTypewriterTimeout);
+        floatingMessageTypewriterTimeout = null;
+    }
+
+    const step = () => {
+        if (index <= fullText.length) {
+            floatingPersonaTextEl.textContent = fullText.slice(0, index);
+            index += 1;
+            floatingMessageTypewriterTimeout = setTimeout(step, speed);
+        } else {
+            // Finished typing
+            floatingMessageTypewriterTimeout = null;
+            if (floatingPersonaAvatar) {
+                floatingPersonaAvatar.classList.remove('talking');
+            }
+            if (floatingPersonaCloseBtn) {
+                floatingPersonaCloseBtn.classList.remove('hidden');
+            }
+        }
+    };
+
+    step();
+}
+
+async function handleFloatingPersonaClose() {
+    if (!floatingPersona) return;
+
+    // Stop typewriter if still running
+    if (floatingMessageTypewriterTimeout) {
+        clearTimeout(floatingMessageTypewriterTimeout);
+        floatingMessageTypewriterTimeout = null;
+    }
+
+    floatingPersona.classList.add('closing');
+    floatingPersona.classList.remove('visible');
+
+    // Persist dismissal so message is truly one-time
+    if (currentUser) {
+        try {
+            await updateDoc(doc(db, 'users', currentUser.uid), {
+                'floatingMessage.isActive': false
+            });
+        } catch (error) {
+            console.error('Failed to update floatingMessage.isActive:', error);
+        }
+    }
+}
+
 function getChatId(uid1, uid2) {
     return [uid1, uid2].sort().join('_');
 }
@@ -1193,7 +1343,7 @@ async function checkUserRelationship() {
         const relationshipsRef = collection(db, 'relationships');
         const q1 = query(relationshipsRef, where('partner1_uid', '==', currentUser.uid));
         const q2 = query(relationshipsRef, where('partner2_uid', '==', currentUser.uid));
-        
+
         const [snapshot1, snapshot2] = await Promise.all([
             getDocs(q1),
             getDocs(q2)
@@ -1211,12 +1361,12 @@ async function checkUserRelationship() {
 
         if (relationshipDoc) {
             currentRelationship = relationshipDoc;
-            
+
             // Determine which partner is the current user and fetch partner data
-            const partnerUid = currentUser.uid === relationshipDoc.partner1_uid 
-                ? relationshipDoc.partner2_uid 
+            const partnerUid = currentUser.uid === relationshipDoc.partner1_uid
+                ? relationshipDoc.partner2_uid
                 : relationshipDoc.partner1_uid;
-            
+
             // Fetch partner user data
             const partnerDoc = await getDoc(doc(db, 'users', partnerUid));
             if (partnerDoc.exists()) {
@@ -1234,7 +1384,7 @@ async function checkUserRelationship() {
                     }
                 }
             }
-            
+
             // Set up real-time listener
             if (relationshipListener) {
                 relationshipListener();
@@ -1251,7 +1401,7 @@ async function checkUserRelationship() {
                     }
                 }
             );
-            
+
             startCountdownTimer();
         } else {
             stopCountdownTimer();
@@ -1266,7 +1416,7 @@ async function checkUserRelationship() {
 // Start countdown timer
 function startCountdownTimer() {
     stopCountdownTimer(); // Clear any existing interval
-    
+
     if (!currentRelationship || !currentRelationship.startDate) {
         return;
     }
@@ -1277,10 +1427,10 @@ function startCountdownTimer() {
     tickerEl.classList.remove('hidden');
 
     const updateCountdown = () => {
-        const startDate = currentRelationship.startDate?.toDate 
-            ? currentRelationship.startDate.toDate() 
+        const startDate = currentRelationship.startDate?.toDate
+            ? currentRelationship.startDate.toDate()
             : new Date(currentRelationship.startDate);
-        
+
         const now = new Date();
         const diff = Math.max(0, now - startDate); // Ensure non-negative
 
@@ -1296,7 +1446,7 @@ function startCountdownTimer() {
         if (countdownTextEl) {
             countdownTextEl.textContent = tickerText;
         }
-        
+
         // Update modal if open
         const modalCountdownEl = document.getElementById('duo-countdown-value');
         if (modalCountdownEl && !document.getElementById('duo-partner-modal').classList.contains('hidden')) {
@@ -1314,12 +1464,12 @@ function stopCountdownTimer() {
         clearInterval(countdownInterval);
         countdownInterval = null;
     }
-    
+
     const tickerEl = document.getElementById('couple-countdown-ticker');
     if (tickerEl) {
         tickerEl.classList.add('hidden');
     }
-    
+
     if (relationshipListener) {
         relationshipListener();
         relationshipListener = null;
@@ -1329,21 +1479,21 @@ function stopCountdownTimer() {
 // Open Duo Partner modal
 async function openDuoPartnerModal() {
     if (!currentRelationship) return;
-    
+
     const modal = document.getElementById('duo-partner-modal');
     if (!modal) return;
-    
+
     // Fetch partner data if not already loaded
     if (!partnerData.partner1 || !partnerData.partner2) {
         try {
             const partner1Uid = currentRelationship.partner1_uid;
             const partner2Uid = currentRelationship.partner2_uid;
-            
+
             const [partner1Doc, partner2Doc] = await Promise.all([
                 getDoc(doc(db, 'users', partner1Uid)),
                 getDoc(doc(db, 'users', partner2Uid))
             ]);
-            
+
             if (partner1Doc.exists()) {
                 partnerData.partner1 = { uid: partner1Uid, ...partner1Doc.data() };
             }
@@ -1354,40 +1504,40 @@ async function openDuoPartnerModal() {
             console.error('Error fetching partner data:', error);
         }
     }
-    
+
     // Update avatars and names
     const avatar1El = document.getElementById('duo-avatar-1');
     const avatar2El = document.getElementById('duo-avatar-2');
     const name1El = document.getElementById('duo-name-1');
     const name2El = document.getElementById('duo-name-2');
-    
+
     if (partnerData.partner1 && avatar1El && name1El) {
         applyAvatarToElement(avatar1El, partnerData.partner1.photoURL, partnerData.partner1.displayName || partnerData.partner1.email);
         name1El.textContent = partnerData.partner1.displayName || partnerData.partner1.email || 'Partner 1';
     }
-    
+
     if (partnerData.partner2 && avatar2El && name2El) {
         applyAvatarToElement(avatar2El, partnerData.partner2.photoURL, partnerData.partner2.displayName || partnerData.partner2.email);
         name2El.textContent = partnerData.partner2.displayName || partnerData.partner2.email || 'Partner 2';
     }
-    
+
     // Update countdown
-    const startDate = currentRelationship.startDate?.toDate 
-        ? currentRelationship.startDate.toDate() 
+    const startDate = currentRelationship.startDate?.toDate
+        ? currentRelationship.startDate.toDate()
         : new Date(currentRelationship.startDate);
     const now = new Date();
     const diff = Math.max(0, now - startDate);
-    
+
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    
+
     const countdownValueEl = document.getElementById('duo-countdown-value');
     if (countdownValueEl) {
         countdownValueEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
     }
-    
+
     // Show modal with animation
     modal.classList.remove('hidden');
 }
@@ -3054,6 +3204,7 @@ function listenToCurrentUser(uid) {
         if (snapshot.exists()) {
             currentUserData = snapshot.data();
             renderCurrentUserProfile();
+            maybeShowFloatingPersonaFromUserData(currentUserData);
         }
     }, (error) => {
         // Suppress permission errors during logout
@@ -3167,7 +3318,7 @@ function subscribeToStories() {
         const stories = [];
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            
+
             // Handle Firestore Timestamp conversion
             let createdAt = null;
             if (data.createdAt) {
@@ -3179,25 +3330,25 @@ function subscribeToStories() {
                     createdAt = new Date(data.createdAt);
                 }
             }
-            
+
             // Skip if createdAt is missing or invalid
             if (!createdAt || isNaN(createdAt.getTime())) {
                 console.warn(`Story ${docSnap.id} has invalid createdAt, skipping`);
                 return;
             }
-            
+
             const createdAtTime = createdAt.getTime();
-            
+
             // Only include stories that are less than 24 hours old
             // Add a small buffer (1 minute) to account for timing differences
             const storyAge = now - createdAtTime;
             const maxAge = STORY_DURATION_MS + (60 * 1000); // 24 hours + 1 minute buffer
-            
+
             if (storyAge > maxAge) {
                 // Story is too old, skip it
                 return;
             }
-            
+
             stories.push({
                 id: docSnap.id,
                 ...data,

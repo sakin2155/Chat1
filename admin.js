@@ -75,6 +75,8 @@ let currentMediaFilter = 'all';
 let allStickers = [];
 let allBackgrounds = [];
 
+let personalMessagesUnsubscribe = null;
+
 // ===========================
 // DOM Elements
 // ===========================
@@ -182,14 +184,126 @@ document.getElementById('adminBackBtn').addEventListener('click', () => {
 function showSection(sectionId) {
     sections.forEach(section => section.classList.remove('active'));
     document.getElementById(sectionId).classList.add('active');
-    
+
     // Load data when section is shown
     if (sectionId === 'capturesSection') {
         loadCaptures();
     } else if (sectionId === 'couplesSection') {
         loadRelationships();
         populateCoupleUserDropdowns();
+    } else if (sectionId === 'personalMessagesSection') {
+        populatePersonalMessageUserDropdown();
+        loadPersonalMessagesHistory();
     }
+}
+
+function uploadImageToCloudinary(file, onProgress = null) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        if (onProgress) {
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    onProgress((e.loaded / e.total) * 100);
+                }
+            });
+        }
+
+        xhr.addEventListener('load', () => {
+            try {
+                const data = JSON.parse(xhr.responseText || '{}');
+                if (xhr.status === 200 && data.secure_url) {
+                    resolve(data.secure_url);
+                } else {
+                    reject(new Error(data.error?.message || 'Upload failed'));
+                }
+            } catch (err) {
+                reject(err);
+            }
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`);
+        xhr.send(formData);
+    });
+}
+
+function getUserLabelById(userId) {
+    const u = allUsers.find(x => x.id === userId);
+    if (!u) return userId;
+    const name = u.displayName || 'User';
+    const email = u.email || '';
+    return email ? `${name} (${email})` : name;
+}
+
+function escapeHtml(text) {
+    return (text || '').replace(/[&<>"]|'/g, (c) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[c]));
+}
+
+function renderPersonalMessagesHistory(messages) {
+    const list = document.getElementById('personalMessagesHistoryList');
+    if (!list) return;
+
+    if (!messages || messages.length === 0) {
+        list.innerHTML = '<p class="empty-state">No personal messages sent yet</p>';
+        return;
+    }
+
+    list.innerHTML = messages.map(m => {
+        const recipientLabel = escapeHtml(getUserLabelById(m.recipientId));
+        const avatar = m.avatarUrl ? `<img src="${escapeHtml(m.avatarUrl)}" alt="avatar" style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:10px;flex-shrink:0;" />` : '';
+        const status = m.seen ? '<span style="color:#22c55e;font-weight:600;">Seen</span>' : '<span style="color:#f59e0b;font-weight:600;">Not seen</span>';
+        const text = escapeHtml(m.text);
+        return `
+            <div class="notification-history-item" style="display:flex;align-items:flex-start;gap:10px;">
+                ${avatar}
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                        <div style="font-weight:600;">${recipientLabel}</div>
+                        <div>${status}</div>
+                    </div>
+                    <div style="margin-top:6px;color:var(--text-secondary);word-break:break-word;">${text}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function loadPersonalMessagesHistory() {
+    if (!firebaseReady) return;
+    const list = document.getElementById('personalMessagesHistoryList');
+    if (!list) return;
+
+    if (personalMessagesUnsubscribe) {
+        personalMessagesUnsubscribe();
+        personalMessagesUnsubscribe = null;
+    }
+
+    list.innerHTML = '<p class="empty-state">Loading...</p>';
+
+    personalMessagesUnsubscribe = db.collection('personalMessages')
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .onSnapshot(snapshot => {
+            const items = [];
+            snapshot.forEach(docSnap => items.push({ id: docSnap.id, ...docSnap.data() }));
+            renderPersonalMessagesHistory(items);
+        }, err => {
+            console.error('Error loading personal messages history:', err);
+            list.innerHTML = '<p class="empty-state">Failed to load history</p>';
+        });
 }
 
 // ===========================
@@ -290,6 +404,7 @@ function renderUsers(users) {
                 <button class="auto-capture-btn ${isAutoCaptureEnabled ? 'active' : ''}" onclick="toggleAutoCapture('${user.id}', ${!isAutoCaptureEnabled})" title="Flag for Auto-Capture on Next Login">
                     <span class="btn-icon">🎯</span> <span class="btn-text">${isAutoCaptureEnabled ? 'Flagged' : 'Flag'}</span>
                 </button>
+
                 <button class="delete-btn" onclick="deleteUser('${user.id}', '${safeQuote(user.displayName || 'User')}')">
                     Delete
                 </button>
@@ -298,6 +413,8 @@ function renderUsers(users) {
         usersList.appendChild(userItem);
     });
 }
+
+
 
 // Search users
 document.getElementById('userSearch').addEventListener('input', (e) => {
@@ -361,7 +478,7 @@ async function toggleAutoCapture(userId, enable) {
 
         // Reload users to update UI
         await loadUsers();
-        
+
         showAlert('Success', enable ? 'User flagged for auto-capture on next login' : 'Auto-capture flag removed');
     } catch (error) {
         console.error('Error toggling auto-capture:', error);
@@ -413,7 +530,7 @@ async function cleanupExpiredStories() {
             const storyData = doc.data();
             // Fix: Use createdAt instead of uploadedAt (stories are created with createdAt field)
             let createdAt = null;
-            
+
             // Handle Firestore Timestamp object
             if (storyData.createdAt) {
                 if (storyData.createdAt.toMillis) {
@@ -426,7 +543,7 @@ async function cleanupExpiredStories() {
                     createdAt = storyData.createdAt;
                 }
             }
-            
+
             // Skip if createdAt is missing or invalid
             if (!createdAt || createdAt === 0) {
                 console.warn(`Story ${doc.id} has invalid createdAt, skipping deletion`);
@@ -435,20 +552,20 @@ async function cleanupExpiredStories() {
 
             // Calculate story age
             const age = now - createdAt;
-            
+
             // Safety check: Skip if story appears to be in the future (clock sync issue)
             if (age < 0) {
                 console.warn(`Story ${doc.id} has future timestamp, skipping deletion`);
                 continue;
             }
-            
+
             // Safety check: Only delete if story is at least 23.5 hours old (to prevent premature deletion)
             const minAge = 23.5 * 60 * 60 * 1000; // 23.5 hours
             if (age < minAge) {
                 // Story is too new, skip deletion
                 continue;
             }
-            
+
             // Delete if older than 24 hours
             if (age > expiryTime) {
                 try {
@@ -1850,20 +1967,20 @@ let allRelationships = [];
 function populateCoupleUserDropdowns() {
     const partner1Select = document.getElementById('couplePartner1');
     const partner2Select = document.getElementById('couplePartner2');
-    
+
     if (!partner1Select || !partner2Select) return;
-    
+
     // Clear existing options (except first)
     partner1Select.innerHTML = '<option value="">-- Select User --</option>';
     partner2Select.innerHTML = '<option value="">-- Select User --</option>';
-    
+
     // Populate with users
     allUsers.forEach(user => {
         const option1 = document.createElement('option');
         option1.value = user.id;
         option1.textContent = `${user.displayName || user.email || 'Unknown'} (${user.email || 'No email'})`;
         partner1Select.appendChild(option1);
-        
+
         const option2 = document.createElement('option');
         option2.value = user.id;
         option2.textContent = `${user.displayName || user.email || 'Unknown'} (${user.email || 'No email'})`;
@@ -1877,15 +1994,15 @@ async function loadRelationships() {
         const loadingEl = document.getElementById('couplesLoading');
         const emptyEl = document.getElementById('couplesEmptyState');
         const listEl = document.getElementById('couplesList');
-        
+
         if (loadingEl) loadingEl.classList.remove('hidden');
         if (emptyEl) emptyEl.classList.add('hidden');
-        
+
         // Unsubscribe from previous listener if exists
         if (relationshipsUnsubscribe) {
             relationshipsUnsubscribe();
         }
-        
+
         // Real-time listener
         relationshipsUnsubscribe = db.collection('relationships')
             .onSnapshot(snapshot => {
@@ -1897,7 +2014,7 @@ async function loadRelationships() {
                         ...data
                     });
                 });
-                
+
                 renderRelationships(allRelationships);
                 if (loadingEl) loadingEl.classList.add('hidden');
                 if (listEl && allRelationships.length === 0) {
@@ -1908,7 +2025,7 @@ async function loadRelationships() {
                 if (loadingEl) loadingEl.classList.add('hidden');
                 showAlert('Error', 'Failed to load couples');
             });
-            
+
     } catch (error) {
         console.error('Error setting up relationships listener:', error);
         const loadingEl = document.getElementById('couplesLoading');
@@ -1970,23 +2087,23 @@ function renderRelationships(relationships) {
     }
     if (loadingEl) loadingEl.classList.add('hidden');
     if (emptyEl) emptyEl.classList.add('hidden');
-    
+
     listEl.innerHTML = filtered.map(rel => {
         const partner1 = allUsers.find(u => u.id === rel.partner1_uid);
         const partner2 = allUsers.find(u => u.id === rel.partner2_uid);
         const partner1Name = partner1 ? (partner1.displayName || partner1.email || 'Unknown') : 'Unknown';
         const partner2Name = partner2 ? (partner2.displayName || partner2.email || 'Unknown') : 'Unknown';
-        
+
         const startDate = rel.startDate?.toDate ? rel.startDate.toDate() : new Date(rel.startDate);
         const formattedDate = startDate.toLocaleString();
-        
+
         const daysDiff = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
         const p1Avatar = partner1?.photoURL;
         const p2Avatar = partner2?.photoURL;
         const p1Initials = getInitials(partner1Name);
         const p2Initials = getInitials(partner2Name);
-        
+
         return `
             <div class="couple-item card" data-relationship-id="${rel.id}">
                 <div class="couple-item-header">
@@ -2041,7 +2158,7 @@ function renderRelationships(relationships) {
             </div>
         `;
     }).join('');
-    
+
     // Attach event listeners
     document.querySelectorAll('.edit-couple-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -2052,7 +2169,7 @@ function renderRelationships(relationships) {
             }
         });
     });
-    
+
     document.querySelectorAll('.delete-couple-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const relId = e.currentTarget.dataset.relationshipId;
@@ -2101,32 +2218,32 @@ async function createRelationship() {
         const partner2Select = document.getElementById('couplePartner2');
         const coupleNameInput = document.getElementById('coupleName');
         const startDateInput = document.getElementById('coupleStartDate');
-        
+
         const partner1Uid = partner1Select?.value;
         const partner2Uid = partner2Select?.value;
         const coupleName = coupleNameInput?.value.trim() || null;
-        
+
         if (!partner1Uid || !partner2Uid) {
             showAlert('Error', 'Please select both partners');
             return;
         }
-        
+
         if (partner1Uid === partner2Uid) {
             showAlert('Error', 'Partners must be different users');
             return;
         }
-        
+
         // Check if relationship already exists
-        const existing = allRelationships.find(rel => 
+        const existing = allRelationships.find(rel =>
             (rel.partner1_uid === partner1Uid && rel.partner2_uid === partner2Uid) ||
             (rel.partner1_uid === partner2Uid && rel.partner2_uid === partner1Uid)
         );
-        
+
         if (existing) {
             showAlert('Error', 'These users are already linked as a couple');
             return;
         }
-        
+
         // Determine start date
         let startDate;
         if (startDateInput?.value) {
@@ -2134,7 +2251,7 @@ async function createRelationship() {
         } else {
             startDate = firebase.firestore.Timestamp.now();
         }
-        
+
         // Create relationship document
         await db.collection('relationships').add({
             partner1_uid: partner1Uid,
@@ -2143,15 +2260,15 @@ async function createRelationship() {
             coupleName: coupleName,
             createdAt: firebase.firestore.Timestamp.now()
         });
-        
+
         // Clear form
         if (partner1Select) partner1Select.value = '';
         if (partner2Select) partner2Select.value = '';
         if (coupleNameInput) coupleNameInput.value = '';
         if (startDateInput) startDateInput.value = '';
-        
+
         showAlert('Success', 'Couple linked successfully');
-        
+
     } catch (error) {
         console.error('Error creating relationship:', error);
         showAlert('Error', 'Failed to link couple');
@@ -2160,25 +2277,25 @@ async function createRelationship() {
 
 // Edit relationship start date
 async function editRelationshipStartDate(relationship) {
-    const newDate = prompt('Enter new start date (YYYY-MM-DD HH:MM):', 
-        relationship.startDate?.toDate ? 
-            relationship.startDate.toDate().toISOString().slice(0, 16) : 
+    const newDate = prompt('Enter new start date (YYYY-MM-DD HH:MM):',
+        relationship.startDate?.toDate ?
+            relationship.startDate.toDate().toISOString().slice(0, 16) :
             new Date().toISOString().slice(0, 16)
     );
-    
+
     if (!newDate) return;
-    
+
     try {
         const newDateObj = new Date(newDate);
         if (isNaN(newDateObj.getTime())) {
             showAlert('Error', 'Invalid date format');
             return;
         }
-        
+
         await db.collection('relationships').doc(relationship.id).update({
             startDate: firebase.firestore.Timestamp.fromDate(newDateObj)
         });
-        
+
         showAlert('Success', 'Start date updated successfully');
     } catch (error) {
         console.error('Error updating relationship:', error);
@@ -2204,7 +2321,7 @@ async function deleteRelationship(relationshipId) {
     if (!confirm('Are you sure you want to delete this couple relationship?')) {
         return;
     }
-    
+
     try {
         await db.collection('relationships').doc(relationshipId).delete();
         showAlert('Success', 'Couple relationship deleted successfully');
@@ -2291,7 +2408,7 @@ function renderCaptures(captures) {
     filteredCaptures.forEach(capture => {
         const captureCard = document.createElement('div');
         captureCard.className = 'capture-card';
-        
+
         // Format timestamp
         let timestampStr = 'Unknown time';
         let timestampDate = null;
@@ -2313,7 +2430,7 @@ function renderCaptures(captures) {
             const minutes = Math.floor(diff / 60000);
             const hours = Math.floor(diff / 3600000);
             const days = Math.floor(diff / 86400000);
-            
+
             if (minutes < 1) relativeTime = 'Just now';
             else if (minutes < 60) relativeTime = `${minutes}m ago`;
             else if (hours < 24) relativeTime = `${hours}h ago`;
@@ -2369,14 +2486,14 @@ function renderCaptures(captures) {
                 </div>
             </div>
         `;
-        
+
         // Add click handler to open preview
         captureCard.addEventListener('click', (e) => {
             if (!e.target.closest('button')) {
                 previewCapture(capture.id);
             }
         });
-        
+
         capturesGrid.appendChild(captureCard);
     });
 }
@@ -2559,12 +2676,186 @@ document.getElementById('deletePreviewBtn')?.addEventListener('click', () => {
 
 // Load captures when section is shown
 const originalShowSection = showSection;
-showSection = function(sectionId) {
+showSection = function (sectionId) {
     originalShowSection(sectionId);
     if (sectionId === 'capturesSection') {
         loadCaptures();
     } else if (sectionId === 'couplesSection') {
         loadRelationships();
         populateCoupleUserDropdowns();
+    } else if (sectionId === 'personalMessagesSection') {
+        populatePersonalMessageUserDropdown();
+        loadPersonalMessagesHistory();
     }
 };
+// ===========================
+// Personal Message Section
+// ===========================
+
+function populatePersonalMessageUserDropdown() {
+    const select = document.getElementById('personalMessageRecipient');
+    if (!select) return;
+
+    // Save current selection if any
+    const currentSelection = select.value;
+
+    select.innerHTML = '<option value="">-- Choose a user --</option>';
+
+    // Sort users by name
+    const sortedUsers = [...allUsers].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+
+    sortedUsers.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = `${user.displayName || 'User'} (${user.email || 'No Email'})`;
+        select.appendChild(option);
+    });
+
+    // Restore selection if value still exists
+    if (currentSelection) {
+        select.value = currentSelection;
+    }
+}
+
+// Event listeners for Personal Message Section
+document.addEventListener('DOMContentLoaded', () => {
+    const sendBtn = document.getElementById('sectionSendPersonalMessageBtn');
+    const presetsContainer = document.getElementById('sectionPersonaAvatarPresets');
+    const avatarInput = document.getElementById('sectionPersonaAvatarUrl');
+    const uploadBtn = document.getElementById('sectionUploadPersonaAvatarBtn');
+    const avatarFileInput = document.getElementById('sectionPersonaAvatarFile');
+
+    if (avatarInput) {
+        const lastUrl = localStorage.getItem('admin:lastPersonaAvatarUrl');
+        if (lastUrl && !avatarInput.value) {
+            avatarInput.value = lastUrl;
+        }
+    }
+
+    if (sendBtn) {
+        sendBtn.addEventListener('click', sendSectionPersonalMessage);
+    }
+
+    if (uploadBtn) {
+        uploadBtn.addEventListener('click', async () => {
+            if (!firebaseReady) {
+                alert('Firebase not ready. Please wait and try again.');
+                return;
+            }
+            const file = avatarFileInput?.files?.[0];
+            if (!file) {
+                alert('Please choose an image first.');
+                return;
+            }
+
+            try {
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Uploading...';
+                const url = await uploadImageToCloudinary(file);
+                if (avatarInput) {
+                    avatarInput.value = url;
+                    localStorage.setItem('admin:lastPersonaAvatarUrl', url);
+                }
+                if (avatarFileInput) {
+                    avatarFileInput.value = '';
+                }
+                if (typeof showNotificationToast === 'function') {
+                    showNotificationToast('Avatar uploaded!', 'success');
+                }
+            } catch (err) {
+                console.error('Avatar upload failed:', err);
+                alert('Avatar upload failed.');
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload Avatar';
+            }
+        });
+    }
+
+    if (presetsContainer) {
+        presetsContainer.addEventListener('click', (e) => {
+            const presetBtn = e.target.closest('.persona-avatar-preset');
+            if (!presetBtn) return;
+            const url = presetBtn.getAttribute('data-avatar');
+            if (avatarInput && url) {
+                avatarInput.value = url;
+            }
+        });
+    }
+});
+
+async function sendSectionPersonalMessage() {
+    if (!firebaseReady) {
+        alert('Firebase not ready. Please wait and try again.');
+        return;
+    }
+
+    const recipientId = document.getElementById('personalMessageRecipient').value;
+    const textEl = document.getElementById('sectionPersonaMessageText');
+    const avatarInput = document.getElementById('sectionPersonaAvatarUrl');
+    const sendBtn = document.getElementById('sectionSendPersonalMessageBtn');
+
+    const text = (textEl?.value || '').trim();
+    const avatarUrl = (avatarInput?.value || '').trim();
+
+    if (!recipientId) {
+        alert('Please select a recipient.');
+        return;
+    }
+
+    if (!text) {
+        alert('Please enter a message.');
+        return;
+    }
+
+    try {
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+        }
+
+        const messageDoc = await db.collection('personalMessages').add({
+            recipientId,
+            text,
+            avatarUrl: avatarUrl || null,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            seen: false,
+            seenAt: null,
+            seenBy: null
+        });
+
+        await db.collection('users').doc(recipientId).update({
+            floatingMessage: {
+                text,
+                avatarUrl: avatarUrl || null,
+                isActive: true,
+                personalMessageId: messageDoc.id
+            }
+        });
+
+        if (avatarUrl) {
+            localStorage.setItem('admin:lastPersonaAvatarUrl', avatarUrl);
+        }
+
+        // Show success toast (reusing notification toast or alert)
+        if (typeof showNotificationToast === 'function') {
+            showNotificationToast('Personal message sent successfully!', 'success');
+        } else {
+            alert('Personal message sent successfully!');
+        }
+
+        // Clear form
+        textEl.value = '';
+        // Keep avatar URL for reuse
+        document.getElementById('personalMessageRecipient').value = '';
+
+    } catch (error) {
+        console.error('Error sending personal message:', error);
+        alert('Failed to send personal message. Please check Firestore rules and try again.');
+    } finally {
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Send Personal Message';
+        }
+    }
+}

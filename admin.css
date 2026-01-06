@@ -901,6 +901,111 @@ body {
 }
 
 /* ===========================
+   Persona Message Modal
+   =========================== */
+.persona-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3500;
+}
+
+.persona-modal.hidden {
+    display: none;
+}
+
+.persona-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.persona-modal-content {
+    position: relative;
+    background-color: var(--surface);
+    border-radius: 16px;
+    padding: 24px 24px 20px;
+    max-width: 420px;
+    width: 92%;
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.6);
+    animation: slideUp 0.28s ease-out;
+    z-index: 1;
+}
+
+.persona-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.persona-modal-header h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.persona-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 22px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.persona-modal-body .form-group {
+    margin-bottom: 14px;
+}
+
+.persona-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.persona-avatar-presets {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.persona-avatar-preset {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background-color: var(--surface-light);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.persona-avatar-preset:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.persona-avatar-preset .preset-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
+}
+
+.persona-avatar-preset .preset-label {
+    white-space: nowrap;
+}
+
+
+
+/* ===========================
    Mobile Responsive
    =========================== */
 @media (max-width: 768px) {

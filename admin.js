@@ -186,6 +186,9 @@ function showSection(sectionId) {
     // Load data when section is shown
     if (sectionId === 'capturesSection') {
         loadCaptures();
+    } else if (sectionId === 'couplesSection') {
+        loadRelationships();
+        populateCoupleUserDropdowns();
     }
 }
 
@@ -240,6 +243,9 @@ async function loadUsers() {
 
             renderUsers(allUsers);
             document.getElementById('usersLoading').classList.add('hidden');
+
+            // Update couple dropdowns if the section exists (ensures options populate after users load)
+            populateCoupleUserDropdowns();
         }, error => {
             console.error('Error loading users:', error);
             document.getElementById('usersLoading').classList.add('hidden');
@@ -1835,6 +1841,380 @@ async function deleteBackground(backgroundId) {
 }
 
 // ===========================
+// Couple Management
+// ===========================
+let relationshipsUnsubscribe = null;
+let allRelationships = [];
+
+// Populate user dropdowns for couple creation
+function populateCoupleUserDropdowns() {
+    const partner1Select = document.getElementById('couplePartner1');
+    const partner2Select = document.getElementById('couplePartner2');
+    
+    if (!partner1Select || !partner2Select) return;
+    
+    // Clear existing options (except first)
+    partner1Select.innerHTML = '<option value="">-- Select User --</option>';
+    partner2Select.innerHTML = '<option value="">-- Select User --</option>';
+    
+    // Populate with users
+    allUsers.forEach(user => {
+        const option1 = document.createElement('option');
+        option1.value = user.id;
+        option1.textContent = `${user.displayName || user.email || 'Unknown'} (${user.email || 'No email'})`;
+        partner1Select.appendChild(option1);
+        
+        const option2 = document.createElement('option');
+        option2.value = user.id;
+        option2.textContent = `${user.displayName || user.email || 'Unknown'} (${user.email || 'No email'})`;
+        partner2Select.appendChild(option2);
+    });
+}
+
+// Load all relationships
+async function loadRelationships() {
+    try {
+        const loadingEl = document.getElementById('couplesLoading');
+        const emptyEl = document.getElementById('couplesEmptyState');
+        const listEl = document.getElementById('couplesList');
+        
+        if (loadingEl) loadingEl.classList.remove('hidden');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        
+        // Unsubscribe from previous listener if exists
+        if (relationshipsUnsubscribe) {
+            relationshipsUnsubscribe();
+        }
+        
+        // Real-time listener
+        relationshipsUnsubscribe = db.collection('relationships')
+            .onSnapshot(snapshot => {
+                allRelationships = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    allRelationships.push({
+                        id: doc.id,
+                        ...data
+                    });
+                });
+                
+                renderRelationships(allRelationships);
+                if (loadingEl) loadingEl.classList.add('hidden');
+                if (listEl && allRelationships.length === 0) {
+                    if (emptyEl) emptyEl.classList.remove('hidden');
+                }
+            }, error => {
+                console.error('Error loading relationships:', error);
+                if (loadingEl) loadingEl.classList.add('hidden');
+                showAlert('Error', 'Failed to load couples');
+            });
+            
+    } catch (error) {
+        console.error('Error setting up relationships listener:', error);
+        const loadingEl = document.getElementById('couplesLoading');
+        if (loadingEl) loadingEl.classList.add('hidden');
+        showAlert('Error', 'Failed to load couples');
+    }
+}
+
+// Render relationships list
+function getInitials(name = '') {
+    return name
+        .split(' ')
+        .filter(Boolean)
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2) || '?';
+}
+
+function renderRelationships(relationships) {
+    const listEl = document.getElementById('couplesList');
+    const totalEl = document.getElementById('totalCouplesCount');
+    const weeklyEl = document.getElementById('weeklyCouplesCount');
+    const loadingEl = document.getElementById('couplesLoading');
+    const emptyEl = document.getElementById('couplesEmptyState');
+    if (!listEl) return;
+
+    // Stats
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const startedThisWeek = relationships.filter(rel => {
+        const sd = rel.startDate?.toDate ? rel.startDate.toDate() : new Date(rel.startDate);
+        return sd >= weekAgo;
+    }).length;
+    if (totalEl) totalEl.textContent = relationships.length.toString();
+    if (weeklyEl) weeklyEl.textContent = startedThisWeek.toString();
+
+    // Search filter
+    const searchInput = document.getElementById('coupleSearch');
+    const q = (searchInput?.value || '').toLowerCase();
+    const filtered = relationships.filter(rel => {
+        const p1 = allUsers.find(u => u.id === rel.partner1_uid);
+        const p2 = allUsers.find(u => u.id === rel.partner2_uid);
+        const fields = [
+            p1?.displayName,
+            p1?.email,
+            p2?.displayName,
+            p2?.email,
+            rel.coupleName
+        ].filter(Boolean).map(v => v.toLowerCase());
+        return q ? fields.some(f => f.includes(q)) : true;
+    });
+
+    if (filtered.length === 0) {
+        listEl.innerHTML = '';
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (emptyEl) emptyEl.classList.remove('hidden');
+        return;
+    }
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (emptyEl) emptyEl.classList.add('hidden');
+    
+    listEl.innerHTML = filtered.map(rel => {
+        const partner1 = allUsers.find(u => u.id === rel.partner1_uid);
+        const partner2 = allUsers.find(u => u.id === rel.partner2_uid);
+        const partner1Name = partner1 ? (partner1.displayName || partner1.email || 'Unknown') : 'Unknown';
+        const partner2Name = partner2 ? (partner2.displayName || partner2.email || 'Unknown') : 'Unknown';
+        
+        const startDate = rel.startDate?.toDate ? rel.startDate.toDate() : new Date(rel.startDate);
+        const formattedDate = startDate.toLocaleString();
+        
+        const daysDiff = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        const p1Avatar = partner1?.photoURL;
+        const p2Avatar = partner2?.photoURL;
+        const p1Initials = getInitials(partner1Name);
+        const p2Initials = getInitials(partner2Name);
+        
+        return `
+            <div class="couple-item card" data-relationship-id="${rel.id}">
+                <div class="couple-item-header">
+                    <div class="couple-avatars">
+                        <div class="couple-avatar ${p1Avatar ? 'has-image' : ''}" style="${p1Avatar ? `background-image:url(${p1Avatar})` : ''}">${p1Avatar ? '' : p1Initials}</div>
+                        <div class="couple-badge" title="Linked">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M12 21s-6.716-4.35-9.428-8.06c-2.366-3.223-.475-7.327 2.63-8.407 2.324-.82 4.69.228 6.07 2.192 1.379-1.964 3.746-3.012 6.07-2.192 3.105 1.08 4.996 5.184 2.63 8.407C18.716 16.65 12 21 12 21Z"/>
+                            </svg>
+                        </div>
+                        <div class="couple-avatar ${p2Avatar ? 'has-image' : ''}" style="${p2Avatar ? `background-image:url(${p2Avatar})` : ''}">${p2Avatar ? '' : p2Initials}</div>
+                    </div>
+                    <div class="couple-info">
+                        <div class="couple-name-row">
+                            <input class="couple-name-input" data-relationship-id="${rel.id}" value="${rel.coupleName || `${partner1Name} & ${partner2Name}`}" />
+                            <button class="btn-icon-only save-couple-name-btn" data-relationship-id="${rel.id}" title="Save couple name">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="couple-partners">${partner1Name} & ${partner2Name}</p>
+                    </div>
+                    <span class="couple-days-pill">${daysDiff} days</span>
+                    <div class="couple-actions">
+                        <button class="btn-icon-only edit-couple-btn" data-relationship-id="${rel.id}" title="Edit Start Date">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </button>
+                        <button class="btn-icon-only delete-couple-btn" data-relationship-id="${rel.id}" title="Delete">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="couple-item-body">
+                    <div class="couple-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">Start Date:</span>
+                            <span class="meta-value">${formattedDate}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Days Together:</span>
+                            <span class="meta-value">${daysDiff} days</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Attach event listeners
+    document.querySelectorAll('.edit-couple-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const relId = e.currentTarget.dataset.relationshipId;
+            const rel = allRelationships.find(r => r.id === relId);
+            if (rel) {
+                editRelationshipStartDate(rel);
+            }
+        });
+    });
+    
+    document.querySelectorAll('.delete-couple-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const relId = e.currentTarget.dataset.relationshipId;
+            deleteRelationship(relId);
+        });
+    });
+
+    document.querySelectorAll('.save-couple-name-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const relId = e.currentTarget.dataset.relationshipId;
+            const input = document.querySelector(`.couple-name-input[data-relationship-id="${relId}"]`);
+            if (input) {
+                updateCoupleName(relId, input.value.trim());
+            }
+        });
+    });
+
+    // Save on Enter key
+    document.querySelectorAll('.couple-name-input').forEach(input => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const relId = e.currentTarget.dataset.relationshipId;
+                updateCoupleName(relId, e.currentTarget.value.trim());
+            }
+        });
+    });
+}
+
+async function updateCoupleName(relationshipId, newName) {
+    try {
+        await db.collection('relationships').doc(relationshipId).update({
+            coupleName: newName || firebase.firestore.FieldValue.delete()
+        });
+        showAlert('Success', 'Couple name updated');
+    } catch (error) {
+        console.error('Error updating couple name:', error);
+        showAlert('Error', 'Failed to update couple name');
+    }
+}
+
+// Create new relationship
+async function createRelationship() {
+    try {
+        const partner1Select = document.getElementById('couplePartner1');
+        const partner2Select = document.getElementById('couplePartner2');
+        const coupleNameInput = document.getElementById('coupleName');
+        const startDateInput = document.getElementById('coupleStartDate');
+        
+        const partner1Uid = partner1Select?.value;
+        const partner2Uid = partner2Select?.value;
+        const coupleName = coupleNameInput?.value.trim() || null;
+        
+        if (!partner1Uid || !partner2Uid) {
+            showAlert('Error', 'Please select both partners');
+            return;
+        }
+        
+        if (partner1Uid === partner2Uid) {
+            showAlert('Error', 'Partners must be different users');
+            return;
+        }
+        
+        // Check if relationship already exists
+        const existing = allRelationships.find(rel => 
+            (rel.partner1_uid === partner1Uid && rel.partner2_uid === partner2Uid) ||
+            (rel.partner1_uid === partner2Uid && rel.partner2_uid === partner1Uid)
+        );
+        
+        if (existing) {
+            showAlert('Error', 'These users are already linked as a couple');
+            return;
+        }
+        
+        // Determine start date
+        let startDate;
+        if (startDateInput?.value) {
+            startDate = firebase.firestore.Timestamp.fromDate(new Date(startDateInput.value));
+        } else {
+            startDate = firebase.firestore.Timestamp.now();
+        }
+        
+        // Create relationship document
+        await db.collection('relationships').add({
+            partner1_uid: partner1Uid,
+            partner2_uid: partner2Uid,
+            startDate: startDate,
+            coupleName: coupleName,
+            createdAt: firebase.firestore.Timestamp.now()
+        });
+        
+        // Clear form
+        if (partner1Select) partner1Select.value = '';
+        if (partner2Select) partner2Select.value = '';
+        if (coupleNameInput) coupleNameInput.value = '';
+        if (startDateInput) startDateInput.value = '';
+        
+        showAlert('Success', 'Couple linked successfully');
+        
+    } catch (error) {
+        console.error('Error creating relationship:', error);
+        showAlert('Error', 'Failed to link couple');
+    }
+}
+
+// Edit relationship start date
+async function editRelationshipStartDate(relationship) {
+    const newDate = prompt('Enter new start date (YYYY-MM-DD HH:MM):', 
+        relationship.startDate?.toDate ? 
+            relationship.startDate.toDate().toISOString().slice(0, 16) : 
+            new Date().toISOString().slice(0, 16)
+    );
+    
+    if (!newDate) return;
+    
+    try {
+        const newDateObj = new Date(newDate);
+        if (isNaN(newDateObj.getTime())) {
+            showAlert('Error', 'Invalid date format');
+            return;
+        }
+        
+        await db.collection('relationships').doc(relationship.id).update({
+            startDate: firebase.firestore.Timestamp.fromDate(newDateObj)
+        });
+        
+        showAlert('Success', 'Start date updated successfully');
+    } catch (error) {
+        console.error('Error updating relationship:', error);
+        showAlert('Error', 'Failed to update start date');
+    }
+}
+
+// Update relationship start date (alternative function name)
+async function updateRelationshipStartDate(relationshipId, newStartDate) {
+    try {
+        const dateObj = newStartDate instanceof Date ? newStartDate : new Date(newStartDate);
+        await db.collection('relationships').doc(relationshipId).update({
+            startDate: firebase.firestore.Timestamp.fromDate(dateObj)
+        });
+    } catch (error) {
+        console.error('Error updating relationship start date:', error);
+        throw error;
+    }
+}
+
+// Delete relationship
+async function deleteRelationship(relationshipId) {
+    if (!confirm('Are you sure you want to delete this couple relationship?')) {
+        return;
+    }
+    
+    try {
+        await db.collection('relationships').doc(relationshipId).delete();
+        showAlert('Success', 'Couple relationship deleted successfully');
+    } catch (error) {
+        console.error('Error deleting relationship:', error);
+        showAlert('Error', 'Failed to delete couple relationship');
+    }
+}
+
+// ===========================
 // Auto-Capture Gallery
 // ===========================
 let capturesUnsubscribe = null;
@@ -2071,6 +2451,26 @@ document.getElementById('clearAllCapturesBtn')?.addEventListener('click', () => 
     clearAllCaptures();
 });
 
+// Couple Management Event Handlers
+document.getElementById('createCoupleBtn')?.addEventListener('click', () => {
+    createRelationship();
+});
+
+document.getElementById('refreshCouplesBtn')?.addEventListener('click', () => {
+    loadRelationships();
+});
+document.getElementById('refreshCouplesBtnSmall')?.addEventListener('click', () => {
+    loadRelationships();
+});
+
+document.getElementById('coupleSearch')?.addEventListener('input', () => {
+    renderRelationships(allRelationships);
+});
+
+document.getElementById('coupleSearch')?.addEventListener('input', () => {
+    renderRelationships(allRelationships);
+});
+
 // Search functionality
 document.getElementById('captureSearch')?.addEventListener('input', (e) => {
     renderCaptures(allCaptures);
@@ -2163,5 +2563,8 @@ showSection = function(sectionId) {
     originalShowSection(sectionId);
     if (sectionId === 'capturesSection') {
         loadCaptures();
+    } else if (sectionId === 'couplesSection') {
+        loadRelationships();
+        populateCoupleUserDropdowns();
     }
 };

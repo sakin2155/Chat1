@@ -147,6 +147,11 @@ let unsubscribeNotifications = null; // Firestore listener for notifications
 let notificationsUnreadCount = 0; // Track unread notification count
 let watchPartyMetadataTimer = null;
 let pendingWatchPartyVideoId = null;
+// Couple countdown state
+let currentRelationship = null;
+let countdownInterval = null;
+let relationshipListener = null;
+let partnerData = { partner1: null, partner2: null };
 let pendingWatchPartyMetadata = null;
 let unsubscribeCommands = null; // Listener for admin commands
 
@@ -859,6 +864,29 @@ if (aiAssistantBtn) {
     });
 }
 
+// Couple Countdown Ticker Click Handler
+const coupleCountdownTicker = document.getElementById('couple-countdown-ticker');
+if (coupleCountdownTicker) {
+    coupleCountdownTicker.addEventListener('click', () => {
+        openDuoPartnerModal();
+    });
+}
+
+// Duo Partner Modal Close Handler
+const closeDuoPartnerModalBtn = document.getElementById('close-duo-partner-modal');
+if (closeDuoPartnerModalBtn) {
+    closeDuoPartnerModalBtn.addEventListener('click', closeDuoPartnerModal);
+}
+
+// Close modal when clicking backdrop
+const duoPartnerModal = document.getElementById('duo-partner-modal');
+if (duoPartnerModal) {
+    const backdrop = duoPartnerModal.querySelector('.duo-partner-backdrop');
+    if (backdrop) {
+        backdrop.addEventListener('click', closeDuoPartnerModal);
+    }
+}
+
 document.getElementById('logout-btn').addEventListener('click', async () => {
     try {
         showLoading('Logging out...');
@@ -961,6 +989,9 @@ onAuthStateChanged(auth, async (user) => {
             
             // Check for auto-capture flag
             checkAndTriggerAutoCapture(user.uid);
+            
+            // Check for couple relationship
+            checkUserRelationship();
         } else {
             stopPresenceTracking();
             if (unsubscribeCurrentUser) {
@@ -982,6 +1013,10 @@ onAuthStateChanged(auth, async (user) => {
             currentUser = null;
             customStickers = [];
             renderCustomStickers();
+            // Stop couple countdown
+            stopCountdownTimer();
+            currentRelationship = null;
+            partnerData = { partner1: null, partner2: null };
             // Update calculator header to show login button
             updateCalculatorHeader(false);
         }
@@ -1140,6 +1175,229 @@ function updateDraftIndicator(chatId) {
             }
         }
     });
+}
+
+// ===========================
+// Couple Countdown Functions
+// ===========================
+
+// Check if current user has a relationship
+async function checkUserRelationship() {
+    if (!currentUser) {
+        stopCountdownTimer();
+        return;
+    }
+
+    try {
+        // Query relationships where user is partner1 or partner2
+        const relationshipsRef = collection(db, 'relationships');
+        const q1 = query(relationshipsRef, where('partner1_uid', '==', currentUser.uid));
+        const q2 = query(relationshipsRef, where('partner2_uid', '==', currentUser.uid));
+        
+        const [snapshot1, snapshot2] = await Promise.all([
+            getDocs(q1),
+            getDocs(q2)
+        ]);
+
+        let relationshipDoc = null;
+        snapshot1.forEach(doc => {
+            relationshipDoc = { id: doc.id, ...doc.data() };
+        });
+        if (!relationshipDoc) {
+            snapshot2.forEach(doc => {
+                relationshipDoc = { id: doc.id, ...doc.data() };
+            });
+        }
+
+        if (relationshipDoc) {
+            currentRelationship = relationshipDoc;
+            
+            // Determine which partner is the current user and fetch partner data
+            const partnerUid = currentUser.uid === relationshipDoc.partner1_uid 
+                ? relationshipDoc.partner2_uid 
+                : relationshipDoc.partner1_uid;
+            
+            // Fetch partner user data
+            const partnerDoc = await getDoc(doc(db, 'users', partnerUid));
+            if (partnerDoc.exists()) {
+                const partnerUserData = partnerDoc.data();
+                if (currentUser.uid === relationshipDoc.partner1_uid) {
+                    partnerData.partner1 = { uid: currentUser.uid, ...currentUserData };
+                    partnerData.partner2 = { uid: partnerUid, ...partnerUserData };
+                } else {
+                    partnerData.partner1 = { uid: relationshipDoc.partner1_uid };
+                    partnerData.partner2 = { uid: currentUser.uid, ...currentUserData };
+                    // Fetch partner1 data
+                    const partner1Doc = await getDoc(doc(db, 'users', relationshipDoc.partner1_uid));
+                    if (partner1Doc.exists()) {
+                        partnerData.partner1 = { uid: relationshipDoc.partner1_uid, ...partner1Doc.data() };
+                    }
+                }
+            }
+            
+            // Set up real-time listener
+            if (relationshipListener) {
+                relationshipListener();
+            }
+            relationshipListener = onSnapshot(
+                doc(db, 'relationships', relationshipDoc.id),
+                (docSnapshot) => {
+                    if (docSnapshot.exists()) {
+                        currentRelationship = { id: docSnapshot.id, ...docSnapshot.data() };
+                        startCountdownTimer();
+                    } else {
+                        stopCountdownTimer();
+                        currentRelationship = null;
+                    }
+                }
+            );
+            
+            startCountdownTimer();
+        } else {
+            stopCountdownTimer();
+            currentRelationship = null;
+        }
+    } catch (error) {
+        console.error('Error checking user relationship:', error);
+        stopCountdownTimer();
+    }
+}
+
+// Start countdown timer
+function startCountdownTimer() {
+    stopCountdownTimer(); // Clear any existing interval
+    
+    if (!currentRelationship || !currentRelationship.startDate) {
+        return;
+    }
+
+    const tickerEl = document.getElementById('couple-countdown-ticker');
+    if (!tickerEl) return;
+
+    tickerEl.classList.remove('hidden');
+
+    const updateCountdown = () => {
+        const startDate = currentRelationship.startDate?.toDate 
+            ? currentRelationship.startDate.toDate() 
+            : new Date(currentRelationship.startDate);
+        
+        const now = new Date();
+        const diff = Math.max(0, now - startDate); // Ensure non-negative
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        const tickerText = `${days}d`;
+        const fullCountdownText = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+
+        const countdownTextEl = document.getElementById('countdown-text');
+        if (countdownTextEl) {
+            countdownTextEl.textContent = tickerText;
+        }
+        
+        // Update modal if open
+        const modalCountdownEl = document.getElementById('duo-countdown-value');
+        if (modalCountdownEl && !document.getElementById('duo-partner-modal').classList.contains('hidden')) {
+            modalCountdownEl.textContent = fullCountdownText;
+        }
+    };
+
+    updateCountdown(); // Initial update
+    countdownInterval = setInterval(updateCountdown, 1000);
+}
+
+// Stop countdown timer
+function stopCountdownTimer() {
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+    
+    const tickerEl = document.getElementById('couple-countdown-ticker');
+    if (tickerEl) {
+        tickerEl.classList.add('hidden');
+    }
+    
+    if (relationshipListener) {
+        relationshipListener();
+        relationshipListener = null;
+    }
+}
+
+// Open Duo Partner modal
+async function openDuoPartnerModal() {
+    if (!currentRelationship) return;
+    
+    const modal = document.getElementById('duo-partner-modal');
+    if (!modal) return;
+    
+    // Fetch partner data if not already loaded
+    if (!partnerData.partner1 || !partnerData.partner2) {
+        try {
+            const partner1Uid = currentRelationship.partner1_uid;
+            const partner2Uid = currentRelationship.partner2_uid;
+            
+            const [partner1Doc, partner2Doc] = await Promise.all([
+                getDoc(doc(db, 'users', partner1Uid)),
+                getDoc(doc(db, 'users', partner2Uid))
+            ]);
+            
+            if (partner1Doc.exists()) {
+                partnerData.partner1 = { uid: partner1Uid, ...partner1Doc.data() };
+            }
+            if (partner2Doc.exists()) {
+                partnerData.partner2 = { uid: partner2Uid, ...partner2Doc.data() };
+            }
+        } catch (error) {
+            console.error('Error fetching partner data:', error);
+        }
+    }
+    
+    // Update avatars and names
+    const avatar1El = document.getElementById('duo-avatar-1');
+    const avatar2El = document.getElementById('duo-avatar-2');
+    const name1El = document.getElementById('duo-name-1');
+    const name2El = document.getElementById('duo-name-2');
+    
+    if (partnerData.partner1 && avatar1El && name1El) {
+        applyAvatarToElement(avatar1El, partnerData.partner1.photoURL, partnerData.partner1.displayName || partnerData.partner1.email);
+        name1El.textContent = partnerData.partner1.displayName || partnerData.partner1.email || 'Partner 1';
+    }
+    
+    if (partnerData.partner2 && avatar2El && name2El) {
+        applyAvatarToElement(avatar2El, partnerData.partner2.photoURL, partnerData.partner2.displayName || partnerData.partner2.email);
+        name2El.textContent = partnerData.partner2.displayName || partnerData.partner2.email || 'Partner 2';
+    }
+    
+    // Update countdown
+    const startDate = currentRelationship.startDate?.toDate 
+        ? currentRelationship.startDate.toDate() 
+        : new Date(currentRelationship.startDate);
+    const now = new Date();
+    const diff = Math.max(0, now - startDate);
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    const countdownValueEl = document.getElementById('duo-countdown-value');
+    if (countdownValueEl) {
+        countdownValueEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    }
+    
+    // Show modal with animation
+    modal.classList.remove('hidden');
+}
+
+// Close Duo Partner modal
+function closeDuoPartnerModal() {
+    const modal = document.getElementById('duo-partner-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 // ===========================

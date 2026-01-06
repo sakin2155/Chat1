@@ -127,6 +127,12 @@
                     </svg>
                     <span>Auto-Capture Gallery</span>
                 </button>
+                <button class="nav-item" data-section="couples">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                    <span>Couple Management</span>
+                </button>
             </nav>
 
             <div class="sidebar-footer">
@@ -720,6 +726,105 @@
                             </svg>
                             <h3>No Backgrounds Found</h3>
                             <p>Upload your first background to get started</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Couple Management Section -->
+                <section class="section" id="couplesSection">
+                    <div class="section-header couples-header">
+                        <div>
+                            <h2>Couple Management</h2>
+                            <p class="section-subtitle">Link users as couples, backdate starts, and manage their "Days Together"</p>
+                        </div>
+                        <div class="couples-stats" id="couplesStats">
+                            <div class="couple-stat-card">
+                                <span class="stat-label">Total Couples</span>
+                                <span class="stat-value" id="totalCouplesCount">0</span>
+                            </div>
+                            <div class="couple-stat-card">
+                                <span class="stat-label">Started This Week</span>
+                                <span class="stat-value" id="weeklyCouplesCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Create Couple Form -->
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header">
+                            <h3>Link as Couple</h3>
+                            <p class="card-subtitle">Pick two users, optionally name them, and backdate the start</p>
+                        </div>
+                        <div class="card-body">
+                            <div class="couple-form-grid">
+                                <div class="form-group">
+                                    <label for="couplePartner1">Partner 1</label>
+                                    <select id="couplePartner1" class="form-control">
+                                        <option value="">-- Select User --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="couplePartner2">Partner 2</label>
+                                    <select id="couplePartner2" class="form-control">
+                                        <option value="">-- Select User --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="coupleName">Couple Name (Optional)</label>
+                                    <input type="text" id="coupleName" class="form-control" placeholder="e.g., John & Jane">
+                                </div>
+                                <div class="form-group">
+                                    <label for="coupleStartDate">Start Date</label>
+                                    <input type="datetime-local" id="coupleStartDate" class="form-control">
+                                    <small class="form-hint">Leave empty to use current date/time, or select a past date to backdate</small>
+                                </div>
+                            </div>
+                            <div class="form-actions couple-actions-row">
+                                <button id="createCoupleBtn" class="btn btn-primary">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+                                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                                    </svg>
+                                    Link as Couple
+                                </button>
+                                <button id="refreshCouplesBtn" class="btn btn-secondary" type="button">
+                                    Refresh List
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Existing Couples List -->
+                    <div class="section-subheader couples-list-header">
+                        <div>
+                            <h3>Existing Couples</h3>
+                            <p class="section-subtitle">Edit names, backdate, or remove links</p>
+                        </div>
+                        <div class="section-controls couples-controls">
+                            <input type="text" id="coupleSearch" class="form-control small" placeholder="Search by name or email...">
+                            <button id="refreshCouplesBtnSmall" class="btn-icon-only" title="Refresh">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 4v6h-6"></path>
+                                    <path d="M1 20v-6h6"></path>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="couples-container">
+                        <div class="loading-spinner" id="couplesLoading">
+                            <div class="spinner"></div>
+                            <p>Loading couples...</p>
+                        </div>
+                        <div class="couples-list" id="couplesList">
+                            <!-- Couples will be loaded here -->
+                        </div>
+                        <div class="empty-state hidden" id="couplesEmptyState">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                            </svg>
+                            <h3>No Couples Yet</h3>
+                            <p>Link two users as a couple to get started</p>
                         </div>
                     </div>
                 </section>

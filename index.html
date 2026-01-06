@@ -93,6 +93,14 @@
                             </svg>
                             <span id="notifications-badge" class="notifications-badge hidden">0</span>
                         </button>
+                        <div id="couple-countdown-ticker" class="couple-countdown-ticker hidden">
+                            <span class="heart-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path d="M12 21s-6.716-4.35-9.428-8.06c-2.366-3.223-.475-7.327 2.63-8.407 2.324-.82 4.69.228 6.07 2.192 1.379-1.964 3.746-3.012 6.07-2.192 3.105 1.08 4.996 5.184 2.63 8.407C18.716 16.65 12 21 12 21Z"/>
+                                </svg>
+                            </span>
+                            <span id="countdown-text">0d</span>
+                        </div>
                         <button id="logout-btn" class="logout-icon" title="Logout">⎋</button>
                     </div>
                 </div>
@@ -740,6 +748,44 @@
             <button id="image-viewer-close" class="image-viewer-close">×</button>
             <img id="image-viewer-img" src="" alt="Preview" class="image-viewer-img">
             <a id="image-viewer-download" class="image-viewer-download" download>Download</a>
+        </div>
+    </div>
+
+    <!-- Duo Partner Modal -->
+    <div id="duo-partner-modal" class="duo-partner-modal hidden">
+        <div class="duo-partner-backdrop"></div>
+        <div class="duo-partner-content">
+            <button id="close-duo-partner-modal" class="duo-partner-close">×</button>
+            <div class="duo-partner-hearts">
+                <div class="heart-particle"></div>
+                <div class="heart-particle"></div>
+                <div class="heart-particle"></div>
+                <div class="heart-particle"></div>
+                <div class="heart-particle"></div>
+                <div class="heart-particle"></div>
+                <div class="heart-particle"></div>
+                <div class="heart-particle"></div>
+            </div>
+            <div class="duo-partner-main">
+                <div class="duo-partner-avatars">
+                    <div class="duo-avatar-container">
+                        <div class="duo-avatar" id="duo-avatar-1">?</div>
+                    </div>
+                    <div class="duo-heart-symbol">❤️</div>
+                    <div class="duo-avatar-container">
+                        <div class="duo-avatar" id="duo-avatar-2">?</div>
+                    </div>
+                </div>
+                <div class="duo-partner-names">
+                    <span id="duo-name-1">Partner 1</span>
+                    <span class="duo-and">&</span>
+                    <span id="duo-name-2">Partner 2</span>
+                </div>
+                <div class="duo-countdown-display">
+                    <div class="duo-countdown-label">Days Together</div>
+                    <div class="duo-countdown-value" id="duo-countdown-value">0d 0h 0m 0s</div>
+                </div>
+            </div>
         </div>
     </div>
 

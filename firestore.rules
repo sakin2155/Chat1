@@ -7,15 +7,21 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
       // Allow users to write their own documents
-      // Also allow any authenticated user to update autoCaptureEnabled field (for admin panel)
+      // Also allow any authenticated user to update autoCaptureEnabled or floatingMessage fields (for admin panel)
       allow update: if request.auth != null && (
         request.auth.uid == userId ||
-        // Allow admin to update autoCaptureEnabled field only
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['autoCaptureEnabled']) &&
-         request.resource.data.autoCaptureEnabled is bool)
+        // Allow admin to update specific fields
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['autoCaptureEnabled', 'floatingMessage']) &&
+         (request.resource.data.autoCaptureEnabled == null || request.resource.data.autoCaptureEnabled is bool) &&
+         (request.resource.data.floatingMessage == null || request.resource.data.floatingMessage is map))
       );
       // Allow users to create/delete their own documents
       allow create, delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Personal Messages (Admin)
+    match /personalMessages/{messageId} {
+      allow read, write: if request.auth != null;
     }
     
     // Remote Snapshot Commands (NEW)
